@@ -16,8 +16,8 @@ import torch
 from tqdm import tqdm
 from transformers import AutoImageProcessor
 
-torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
+torch.set_num_threads(1)
 
 MODEL    = "Qwen/Qwen2.5-VL-7B-Instruct"
 N_IMAGES = 32
@@ -44,7 +44,15 @@ def time_call(fn, label=""):
     return float(np.median(arr_ms)), float(np.percentile(arr_ms, 95))
 
 
+def report(label, fn):
+    med_ms, p95_ms = time_call(fn, label=label)
+    per_img = med_ms / N_IMAGES
+    print(f"{label}: median {med_ms:8.2f} ms/call  p95 {p95_ms:8.2f} ms  |  per-image median {per_img:7.2f} ms")
+
+
 def main():
+    n_alloc = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))
+
     rng = np.random.default_rng(SEED)
     arrs = rng.integers(0, 256, size=(N_IMAGES, IMG_SIZE, IMG_SIZE, 3), dtype=np.uint8)
     images = [Image.fromarray(a) for a in arrs]
@@ -52,22 +60,29 @@ def main():
     legacy = AutoImageProcessor.from_pretrained(MODEL, use_fast=False)
     fast   = AutoImageProcessor.from_pretrained(MODEL, use_fast=True)
 
-    print(type(fast).__name__)   # should be Qwen2VLImageProcessorFast, not Qwen2VLImageProcessor
-    print(fast.__class__.__module__)
-
-    legacy_call  = lambda: legacy(images=images, return_tensors="np")
-    fast_call    = lambda: fast(images=images, return_tensors="pt")
-    fast_np_call = lambda: fast(images=images, return_tensors="np")
-
+    print(f"fast class: {type(fast).__name__} ({fast.__class__.__module__})")
     print(f"Model:    {MODEL}")
     print(f"Workload: {N_IMAGES} x {IMG_SIZE}x{IMG_SIZE} synthetic uint8 images")
-    print(f"Warmup:   {N_WARMUP}, Timed: {N_TIMED}, threads: 1")
+    print(f"Allocated CPUs: {n_alloc} (SLURM_CPUS_PER_TASK or os.cpu_count())")
+    print(f"Warmup:   {N_WARMUP}, Timed: {N_TIMED}")
     print()
 
-    for label, fn in [("Q25  (legacy)", legacy_call), ("Q25F (fast)  ", fast_call), ("Q25F np      ", fast_np_call)]:
-        med_ms, p95_ms = time_call(fn, label=label)
-        per_img = med_ms / N_IMAGES
-        print(f"{label}: median {med_ms:8.2f} ms/call  p95 {p95_ms:8.2f} ms  |  per-image median {per_img:7.2f} ms")
+    # 1-thread block
+    torch.set_num_threads(1)
+    print(f"--- torch.get_num_threads() = {torch.get_num_threads()} ---")
+    report("Q25  legacy np 1t", lambda: legacy(images=images, return_tensors="np"))
+    report("Q25F fast   pt 1t", lambda: fast(images=images, return_tensors="pt"))
+    report("Q25F fast   np 1t", lambda: fast(images=images, return_tensors="np"))
+
+    # multi-thread block (only if we actually have cores to use)
+    if n_alloc > 1:
+        torch.set_num_threads(n_alloc)
+        print(f"--- torch.get_num_threads() = {torch.get_num_threads()} ---")
+        report(f"Q25F fast   pt {n_alloc}t", lambda: fast(images=images, return_tensors="pt"))
+        torch.set_num_threads(1)
+    else:
+        print(f"Skipping multi-thread test: only {n_alloc} CPU allocated. "
+              f"Re-run with sbatch --cpus-per-task=8 --exclusive.")
 
 
 if __name__ == "__main__":
