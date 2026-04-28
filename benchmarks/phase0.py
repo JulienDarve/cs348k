@@ -77,6 +77,7 @@ def main():
     if n_alloc > 1:
         torch.set_num_threads(n_alloc)
         print(f"--- torch.get_num_threads() = {torch.get_num_threads()} ---")
+        report(f"Q25  legacy np {n_alloc}t", lambda: legacy(images=images, return_tensors="np"))
         report(f"Q25F fast   pt {n_alloc}t", lambda: fast(images=images, return_tensors="pt"))
         torch.set_num_threads(1)
     else:
