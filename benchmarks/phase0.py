@@ -72,7 +72,6 @@ def main():
     print(f"--- torch.get_num_threads() = {torch.get_num_threads()} ---")
     report("Q25  legacy np 1t", lambda: legacy(images=images, return_tensors="np"))
     report("Q25F fast   pt 1t", lambda: fast(images=images, return_tensors="pt"))
-    report("Q25F fast   np 1t", lambda: fast(images=images, return_tensors="np"))
 
     # multi-thread block (only if we actually have cores to use)
     if n_alloc > 1:
