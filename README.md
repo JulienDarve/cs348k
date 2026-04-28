@@ -4,7 +4,12 @@
 
 `source $(poetry env info --path)/bin/activate`
 
-## Farmshare command
+## Farmshare
+Link:
+
+`https://docs.farmshare.stanford.edu/`
+
+Command to run:
 
 `srun -c 8 --mem=16G --time=02:00:00 --pty bash`
 

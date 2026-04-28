@@ -67,11 +67,13 @@ def main():
     print(f"Warmup:   {N_WARMUP}, Timed: {N_TIMED}")
     print()
 
+    # Note: return_tensors="pt" not supported on Q25F fast
+
     # 1-thread block
-    # torch.set_num_threads(1)
-    # print(f"--- torch.get_num_threads() = {torch.get_num_threads()} ---")
-    # report("Q25  legacy np 1t", lambda: legacy(images=images, return_tensors="np"))
-    # report("Q25F fast   pt 1t", lambda: fast(images=images, return_tensors="pt"))
+    torch.set_num_threads(1)
+    print(f"--- torch.get_num_threads() = {torch.get_num_threads()} ---")
+    report("Q25  legacy np 1t", lambda: legacy(images=images, return_tensors="np"))
+    report("Q25F fast   pt 1t", lambda: fast(images=images, return_tensors="pt"))
 
     # multi-thread block (only if we actually have cores to use)
     if n_alloc > 1:
