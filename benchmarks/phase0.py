@@ -52,15 +52,19 @@ def main():
     legacy = AutoImageProcessor.from_pretrained(MODEL, use_fast=False)
     fast   = AutoImageProcessor.from_pretrained(MODEL, use_fast=True)
 
-    legacy_call = lambda: legacy(images=images, return_tensors="np")
-    fast_call   = lambda: fast(images=images, return_tensors="pt")
+    print(type(fast).__name__)   # should be Qwen2VLImageProcessorFast, not Qwen2VLImageProcessor
+    print(fast.__class__.__module__)
+
+    legacy_call  = lambda: legacy(images=images, return_tensors="np")
+    fast_call    = lambda: fast(images=images, return_tensors="pt")
+    fast_np_call = lambda: fast(images=images, return_tensors="np")
 
     print(f"Model:    {MODEL}")
     print(f"Workload: {N_IMAGES} x {IMG_SIZE}x{IMG_SIZE} synthetic uint8 images")
     print(f"Warmup:   {N_WARMUP}, Timed: {N_TIMED}, threads: 1")
     print()
 
-    for label, fn in [("Q25  (legacy)", legacy_call), ("Q25F (fast)  ", fast_call)]:
+    for label, fn in [("Q25  (legacy)", legacy_call), ("Q25F (fast)  ", fast_call), ("Q25F np      ", fast_np_call)]:
         med_ms, p95_ms = time_call(fn, label=label)
         per_img = med_ms / N_IMAGES
         print(f"{label}: median {med_ms:8.2f} ms/call  p95 {p95_ms:8.2f} ms  |  per-image median {per_img:7.2f} ms")
