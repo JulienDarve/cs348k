@@ -79,6 +79,8 @@ def main():
     pdir = Path(args.profiles_dir)
     slow, fast = load_processors(MODEL_ID)
 
+    print(f"Loaded models: {MODEL_ID}")
+
     slow_ms = run("Qwen2.5-VL legacy (W2)", slow, images, "np", pdir / "Q25_W2_legacy.txt",
                   args.n_warmup, args.n_timed)
     fast_ms = run("Qwen2.5-VL fast (W2)",   fast, images, "pt", pdir / "Q25_W2_fast.txt",
