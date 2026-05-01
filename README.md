@@ -5,9 +5,11 @@
 `source $(poetry env info --path)/bin/activate`
 
 ## Farmshare
-Link:
+Links
 
 `https://docs.farmshare.stanford.edu/`
+
+`ssh jdarve@login.farmshare.stanford.edu`
 
 Command to run:
 

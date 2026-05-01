@@ -42,7 +42,7 @@ def time_call(fn, label=""):
         gc.enable()
     arr_ms = np.array(times_ns) / 1e6
     return float(np.median(arr_ms)), float(np.percentile(arr_ms, 95))
-
+    
 
 def report(label, fn):
     med_ms, p95_ms = time_call(fn, label=label)

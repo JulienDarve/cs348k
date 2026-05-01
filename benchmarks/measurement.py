@@ -1,0 +1,96 @@
+import cProfile
+import gc
+import io
+import platform
+import pstats
+import time
+import tracemalloc
+
+import numpy as np
+import torch
+
+def time_fn(fn, n_warmup=10, n_timed=100):
+    for _ in range(n_warmup):
+        fn()
+    gc.collect()
+    gc.disable()
+    try:
+        ts = []
+        for _ in range(n_timed):
+            t0 = time.perf_counter_ns()
+            fn()
+            ts.append(time.perf_counter_ns() - t0)
+    finally:
+        gc.enable()
+    a = np.array(ts, dtype=np.float64) / 1e6
+    return float(np.median(a)), float(np.percentile(a, 95) - np.percentile(a, 50))
+
+
+def output_bytes(out):
+    pv = out["pixel_values"]
+    if isinstance(pv, torch.Tensor):
+        return pv.element_size() * pv.nelement()
+    if isinstance(pv, np.ndarray):
+        return int(pv.nbytes)
+    if isinstance(pv, (list, tuple)):
+        return sum(output_bytes({"pixel_values": p}) for p in pv)
+    raise TypeError(f"unexpected pixel_values type: {type(pv)}")
+
+
+def output_shape(out):
+    pv = out["pixel_values"]
+    if isinstance(pv, (torch.Tensor, np.ndarray)):
+        return tuple(pv.shape)
+    if isinstance(pv, (list, tuple)):
+        return [output_shape({"pixel_values": p}) for p in pv]
+    return "?"
+
+
+def profile_and_measure(name, fn, out_path, top_n=20):
+    """Run fn under cProfile, then under tracemalloc; write results to out_path."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    pr = cProfile.Profile()
+    pr.enable()
+    fn()
+    pr.disable()
+    buf = io.StringIO()
+    pstats.Stats(pr, stream=buf).sort_stats("cumulative").print_stats(top_n)
+    profile_text = buf.getvalue()
+
+    gc.collect()
+    tracemalloc.start()
+    try:
+        result = fn()
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    out_b = output_bytes(result)
+    ratio = peak / out_b if out_b > 0 else float("nan")
+
+    header = (
+        f"=== {name} ===\n"
+        f"output shape:    {output_shape(result)}\n"
+        f"output bytes:    {out_b/1e6:.2f} MB\n"
+        f"peak allocated:  {peak/1e6:.2f} MB  (tracemalloc; undercounts torch allocator)\n"
+        f"peak / output:   {ratio:.2f}x\n\n"
+    )
+    out_path.write_text(header + profile_text)
+    return peak, out_b, ratio
+
+
+def env_info():
+    import os
+    import PIL
+    import torchvision
+    import transformers
+    return (
+        f"python={platform.python_version()} platform={platform.platform()}\n"
+        f"cpu={platform.processor() or platform.machine()}\n"
+        f"transformers={transformers.__version__} torch={torch.__version__} "
+        f"torchvision={torchvision.__version__} pillow={PIL.__version__} "
+        f"numpy={np.__version__}\n"
+        f"OMP_NUM_THREADS={os.environ.get('OMP_NUM_THREADS')} "
+        f"MKL_NUM_THREADS={os.environ.get('MKL_NUM_THREADS')} "
+        f"torch_threads={torch.get_num_threads()}"
+    )
