@@ -17,3 +17,32 @@ def load_images(img_dir=None, n_images=32, img_size=(1024, 1024)):
     rng = np.random.default_rng(0)
     arrs = rng.integers(0, 256, size=(n_images, img_size[1], img_size[0], 3), dtype=np.uint8)
     return [Image.fromarray(a) for a in arrs]
+
+
+def load_images_w3(n_images=32, seed=0):
+    """Return n_images RGB PIL images with random sizes, aspect ratio in [0.5, 2.0].
+
+    Width and height are sampled independently from [512, 2048], then the shorter
+    side is rescaled so max/min <= 2.0. Seeded for reproducibility.
+    """
+    rng = np.random.default_rng(seed)
+    images = []
+    for _ in range(n_images):
+        w = int(rng.integers(512, 2049))
+        h = int(rng.integers(512, 2049))
+        ratio = max(w, h) / min(w, h)
+        if ratio > 2.0:
+            if w > h:
+                h = w // 2
+            else:
+                w = h // 2
+        arr = rng.integers(0, 256, size=(h, w, 3), dtype=np.uint8)
+        images.append(Image.fromarray(arr))
+    return images
+
+
+def load_images_w4(n_images=8, seed=0):
+    """Return n_images synthetic RGB PIL images at A4 @ 300 dpi (2480x3508)."""
+    rng = np.random.default_rng(seed)
+    arrs = rng.integers(0, 256, size=(n_images, 3508, 2480, 3), dtype=np.uint8)
+    return [Image.fromarray(a) for a in arrs]
