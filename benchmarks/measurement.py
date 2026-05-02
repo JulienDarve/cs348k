@@ -3,6 +3,7 @@ import gc
 import io
 import platform
 import pstats
+import resource
 import time
 import tracemalloc
 
@@ -59,24 +60,29 @@ def profile_and_measure(name, fn, out_path, top_n=20):
     profile_text = buf.getvalue()
 
     gc.collect()
+    start_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     tracemalloc.start()
     try:
         result = fn()
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
+    end_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    peak_rss_bytes = (end_rss - start_rss) * 1024
+    actual_peak = max(peak_rss_bytes, peak)
+
     out_b = output_bytes(result)
-    ratio = peak / out_b if out_b > 0 else float("nan")
+    ratio = actual_peak / out_b if out_b > 0 else float("nan")
 
     header = (
         f"=== {name} ===\n"
         f"output shape:    {output_shape(result)}\n"
         f"output bytes:    {out_b/1e6:.2f} MB\n"
-        f"peak allocated:  {peak/1e6:.2f} MB  (tracemalloc; undercounts torch allocator)\n"
+        f"peak alloc (OS): {actual_peak/1e6:.2f} MB\n"
         f"peak / output:   {ratio:.2f}x\n\n"
     )
     out_path.write_text(header + profile_text)
-    return peak, out_b, ratio
+    return actual_peak, out_b, ratio
 
 
 def env_info():
