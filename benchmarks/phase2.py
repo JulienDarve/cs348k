@@ -50,7 +50,7 @@ N_TIMED = 100
 
 
 def run(name, call, n_images, profile_path, n_warmup, n_timed):
-    median_ms, p95_p50 = time_fn(call, n_warmup=n_warmup, n_timed=n_timed)
+    median_ms, p95_p50 = time_fn(call, n_warmup=n_warmup, n_timed=n_timed, desc=name)
     peak, out_b, ratio = profile_and_measure(name, call, profile_path)
 
     print(f"\n--- {name} ---")

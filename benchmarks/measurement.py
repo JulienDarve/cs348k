@@ -9,15 +9,17 @@ import tracemalloc
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
-def time_fn(fn, n_warmup=10, n_timed=100):
-    for _ in range(n_warmup):
+def time_fn(fn, n_warmup=10, n_timed=100, desc=None):
+    prefix = f"{desc} " if desc else ""
+    for _ in tqdm(range(n_warmup), desc=f"{prefix}warmup", leave=False):
         fn()
     gc.collect()
     gc.disable()
     try:
         ts = []
-        for _ in range(n_timed):
+        for _ in tqdm(range(n_timed), desc=f"{prefix}timing"):
             t0 = time.perf_counter_ns()
             fn()
             ts.append(time.perf_counter_ns() - t0)
