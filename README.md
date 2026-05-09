@@ -1,7 +1,7 @@
 # cs348k
 
 # Note for Milestone 1
-Please go to `MILESTONE_1.md` for the write up and results for Milestone 1! Everything in the README.md is more notes for me and not fully updated.
+Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 ## Activate poetry
 
@@ -26,13 +26,14 @@ Links
 
 - `models.py`: Loads the relevant model pre-processing code from huggingface. All huggingface model/pre-processing code fetching should be done here.
 
-- `phase[n]_results.md`: Results from phase `n`.
+- `phase[n].py`, `phase[n]_results.md`: Experiment and results from phase `n` (sanity checks, explained in the milestone)
 
-- `phase0.py`: Self-contained sanity check file. Verifies that image pre-processing is slow.
+- `full_benchmark_single_thread.py`: Runs the full benchmark results
 
-- `phase1.py`: Pulls together `data.py`, `measurement.py`, and `models.py` to profile Qwen2.5-VL-7B
+- `full_memory_benchmark_single_thread.py`: Runs the full memory benchmark results (there is a bug in full_benchmark_single_thread that makes its memory results invalid; this is the file that re-runs memory by itself, correctly).
 
-- `phase2.py`: Same as phase1, Profiles InternVL-2.5
+`visualizations/` folder: contains Jupyter notebooks for creating visualizations from the output data.
+
 
 
 ## Project Proposal

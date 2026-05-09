@@ -1,3 +1,5 @@
 CLAUDE.md
 .claude
 notes/*
+benchmarks/__pycache__
+.pytest_cache
