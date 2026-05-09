@@ -50,9 +50,9 @@ We compare two workloads: W3, which is variable sized images, and W4, which are 
 
 The two plots below compare runtimes on the W3 and W4 workloads. Each run included 10 warmup steps, and we computed the median runtime of 100 runs. To start, observe the y-axis measures the median runtime per batch in milliseconds; some of the W3 images can take up to multiple seconds on certain models! Across the board, the fast implementation is helping significantly (except for Qwen on W4). Qwen performed significantly worse on the large images compared to other models. 
 
-![w3_runtime_legacy_vs_fast](visualizations\figures\w3_runtime_legacy_vs_fast.png)
+![w3_runtime_legacy_vs_fast](visualizations/figures/w3_runtime_legacy_vs_fast.png)
 
-![w4_runtime_legacy_vs_fast](visualizations\figures\w4_runtime_legacy_vs_fast.png)
+![w4_runtime_legacy_vs_fast](visualizations/figures/w4_runtime_legacy_vs_fast.png)
 
 ### Peak Memory
 
@@ -60,9 +60,9 @@ The two plots below compare peak memory allocation on the W3 and W4 workloads. T
 
 This was implemented using RSS, sampling the current memory allocation at rapid, regular intervals, implemented in `measurement.py`. I could not use a standard python method like `traceMalloc` as the tensor operations are done in C and were not being recorded. 
 
-![w3_peak_rss_legacy_fast_manual](visualizations\figures\w3_peak_rss_legacy_fast_manual.png)
+![w3_peak_rss_legacy_fast_manual](visualizations/figures/w3_peak_rss_legacy_fast_manual.png)
 
-![w4_peak_memory_legacy_fast_manual](visualizations\figures\w4_peak_rss_legacy_fast_manual.png)
+![w4_peak_memory_legacy_fast_manual](visualizations/figures/w4_peak_rss_legacy_fast_manual.png)
 
 ### Profiling
 
@@ -77,10 +77,10 @@ Finally, we profiled the time per function for each function in the pre-processi
 
 The absolute time spent in each computation group is shown below (profiled over a single image). As we can see, in W3 a large percentage of the comptuation has room for optimization as they fall into the latter four categories rather than the first two. In W4, Qwen suffers the most from data movement operations, while the others are dominated by the resize operations.
 
-![w3_profile_runtime_breakdown](visualizations\figures\w3_profile_runtime_breakdown.png)
+![w3_profile_runtime_breakdown](visualizations/figures/w3_profile_runtime_breakdown.png)
 
 
-![w4_profile_runtime_breakdown](visualizations\figures\w4_profile_runtime_breakdown.png)
+![w4_profile_runtime_breakdown](visualizations/figures/w4_profile_runtime_breakdown.png)
 
 ## Conclusion
 
