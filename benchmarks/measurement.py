@@ -4,12 +4,53 @@ import io
 import platform
 import pstats
 import resource
+import threading
 import time
-import tracemalloc
 
 import numpy as np
 import torch
 from tqdm import tqdm
+
+_PAGE = resource.getpagesize()  # type: ignore[attr-defined]
+
+
+def _current_rss_bytes():
+    with open("/proc/self/statm", "rb") as f:
+        return int(f.read().split()[1]) * _PAGE
+
+
+def measure_peak_rss(fn, sample_hz=2000):
+    """Run fn while sampling RSS in a background thread.
+
+    Returns (result, peak_delta_bytes). peak_delta is peak RSS observed
+    during fn() minus RSS at entry, so it's the additional working set
+    fn() caused (modulo allocator pool retention from prior calls).
+    """
+    interval = 1.0 / sample_hz
+    stop = threading.Event()
+    baseline = _current_rss_bytes()
+    peak = baseline
+
+    def sampler():
+        nonlocal peak
+        while not stop.is_set():
+            r = _current_rss_bytes()
+            if r > peak:
+                peak = r
+            time.sleep(interval)
+
+    t = threading.Thread(target=sampler, daemon=True)
+    t.start()
+    try:
+        result = fn()
+    finally:
+        r = _current_rss_bytes()
+        if r > peak:
+            peak = r
+        stop.set()
+        t.join()
+    return result, peak - baseline
+
 
 def time_fn(fn, n_warmup=10, n_timed=100, desc=None):
     prefix = f"{desc} " if desc else ""
@@ -50,7 +91,7 @@ def output_shape(out):
 
 
 def profile_and_measure(name, fn, out_path, top_n=20):
-    """Run fn under cProfile, then under tracemalloc; write results to out_path."""
+    """Run fn under cProfile, then measure peak RSS; write results to out_path."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     pr = cProfile.Profile()
@@ -62,29 +103,20 @@ def profile_and_measure(name, fn, out_path, top_n=20):
     profile_text = buf.getvalue()
 
     gc.collect()
-    start_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    tracemalloc.start()
-    try:
-        result = fn()
-        _, peak = tracemalloc.get_traced_memory()
-    finally:
-        tracemalloc.stop()
-    end_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    peak_rss_bytes = (end_rss - start_rss) * 1024
-    actual_peak = max(peak_rss_bytes, peak)
+    result, peak_rss = measure_peak_rss(fn)
 
     out_b = output_bytes(result)
-    ratio = actual_peak / out_b if out_b > 0 else float("nan")
+    ratio = peak_rss / out_b if out_b > 0 else float("nan")
 
     header = (
         f"=== {name} ===\n"
         f"output shape:    {output_shape(result)}\n"
         f"output bytes:    {out_b/1e6:.2f} MB\n"
-        f"peak alloc (OS): {actual_peak/1e6:.2f} MB\n"
+        f"peak RSS delta:  {peak_rss/1e6:.2f} MB\n"
         f"peak / output:   {ratio:.2f}x\n\n"
     )
     out_path.write_text(header + profile_text)
-    return actual_peak, out_b, ratio
+    return peak_rss, out_b, ratio
 
 
 def env_info():
