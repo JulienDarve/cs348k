@@ -10,6 +10,7 @@ IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
 MODEL_ID_INTERNVL = "OpenGVLab/InternVL2_5-8B"
+MODEL_ID_LLAVA = "llava-hf/llava-v1.6-mistral-7b-hf"
 
 
 def load_processors(model_id):
@@ -108,3 +109,8 @@ def get_internvl_manual_processor(max_num=12):
         return {"pixel_values": torch.cat(pixel_values_list, dim=0)}
 
     return process_batch
+
+
+def get_llava_hf_processor(use_fast=False):
+    """Return the HF AutoImageProcessor for llava-v1.6-mistral-7b-hf."""
+    return AutoImageProcessor.from_pretrained(MODEL_ID_LLAVA, use_fast=use_fast)
