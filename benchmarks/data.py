@@ -28,8 +28,8 @@ def load_images_w3(n_images=32, seed=0):
     rng = np.random.default_rng(seed)
     images = []
     for _ in range(n_images):
-        w = int(rng.integers(512, 2049))
-        h = int(rng.integers(512, 2049))
+        w = int(rng.integers(256, 1047))
+        h = int(rng.integers(256, 1047))
         ratio = max(w, h) / min(w, h)
         if ratio > 2.0:
             if w > h:
