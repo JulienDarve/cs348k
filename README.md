@@ -1,5 +1,8 @@
 # cs348k
 
+# Note for Milestone 1
+Please go to `MILESTONE_1.md` for the write up and results for Milestone 1! Everything in the README.md is more notes for me and not fully updated.
+
 ## Activate poetry
 
 `source $(poetry env info --path)/bin/activate`
@@ -17,11 +20,9 @@ Links
 
 `benchmarks/` folder:
 
-- `implementation.md`: Overview of four part implementation / sanity check plan for benchmarking
-
 - `data.py`: Contains `load_images` function. All iamge loading code should be here.
 
-- `measurement.py`: Timing and profiling harness using `cProfile` and `traceMalloc`. All profiling code should be here.
+- `measurement.py`: Timing and profiling harness using `cProfile` and `RSS`. All profiling code should be here.
 
 - `models.py`: Loads the relevant model pre-processing code from huggingface. All huggingface model/pre-processing code fetching should be done here.
 
