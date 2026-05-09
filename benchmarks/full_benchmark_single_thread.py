@@ -16,10 +16,9 @@ Protocol:
   - time.perf_counter_ns(), gc disabled during timed loop.
   - Pre-decoded PIL images in RAM, no GPU.
 
-Profile outputs (one .txt per variant × workload):
-  profiles/Q25_W{3,4}_{legacy,fast}.txt
-  profiles/IV25_W{3,4}_{hf_legacy,hf_fast,manual}.txt
-  profiles/LLaVA_W{3,4}_{legacy,fast}.txt
+Profile outputs (one .txt per variant, grouped by workload subdirectory):
+  profiles/W3/{Q25_legacy,Q25_fast,IV25_hf_legacy,IV25_hf_fast,IV25_manual,LLaVA_legacy,LLaVA_fast}.txt
+  profiles/W4/{Q25_legacy,Q25_fast,IV25_hf_legacy,IV25_hf_fast,IV25_manual,LLaVA_legacy,LLaVA_fast}.txt
 
 Usage:
   python full_benchmark_single_thread.py
@@ -70,7 +69,7 @@ def run_workload(label, images, pdir,
                  llava_slow, llava_fast,
                  n_warmup, n_timed):
     n = len(images)
-    tag = label.upper()
+    wdir = pdir / label.upper()
 
     print(f"\n{'='*60}")
     print(f"workload {label}: {n} images  (warmup={n_warmup}, timed={n_timed})")
@@ -79,43 +78,43 @@ def run_workload(label, images, pdir,
     q_slow_ms = run(
         f"Qwen2.5-VL legacy ({label})",
         lambda: q_slow(images=images, return_tensors="np"),
-        n, pdir / f"Q25_{tag}_legacy.txt",
+        n, wdir / "Q25_legacy.txt",
         n_warmup, n_timed,
     )
     q_fast_ms = run(
         f"Qwen2.5-VL fast ({label})",
         lambda: q_fast(images=images, return_tensors="pt"),
-        n, pdir / f"Q25_{tag}_fast.txt",
+        n, wdir / "Q25_fast.txt",
         n_warmup, n_timed,
     )
     iv_slow_ms = run(
         f"InternVL2.5 HF Legacy ({label})",
         lambda: iv_hf_slow(images=images, return_tensors="np"),
-        n, pdir / f"IV25_{tag}_hf_legacy.txt",
+        n, wdir / "IV25_hf_legacy.txt",
         n_warmup, n_timed,
     )
     iv_fast_ms = run(
         f"InternVL2.5 HF Fast ({label})",
         lambda: iv_hf_fast(images=images, return_tensors="pt"),
-        n, pdir / f"IV25_{tag}_hf_fast.txt",
+        n, wdir / "IV25_hf_fast.txt",
         n_warmup, n_timed,
     )
     iv_manual_ms = run(
         f"InternVL2.5 Manual Card ({label})",
         lambda: iv_manual(images),
-        n, pdir / f"IV25_{tag}_manual.txt",
+        n, wdir / "IV25_manual.txt",
         n_warmup, n_timed,
     )
     llava_slow_ms = run(
         f"LLaVA legacy ({label})",
         lambda: llava_slow(images=images, return_tensors="np"),
-        n, pdir / f"LLaVA_{tag}_legacy.txt",
+        n, wdir / "LLaVA_legacy.txt",
         n_warmup, n_timed,
     )
     llava_fast_ms = run(
         f"LLaVA fast ({label})",
         lambda: llava_fast(images=images, return_tensors="pt"),
-        n, pdir / f"LLaVA_{tag}_fast.txt",
+        n, wdir / "LLaVA_fast.txt",
         n_warmup, n_timed,
     )
 

@@ -8,7 +8,9 @@ What experiments should be done to answer that question, and how will you know f
 
 ## Problem Overview
 
-Historically, image pre-processing for machine learning models has been simple, with models hardcoded to a set image size, which may only need resizing and normalization. However, modern vision language model (VLM) pipelines work in the native pixel resolution of the image, and may perform more sophisticated pre-processing, such as dynamic tiling, patching, and multiple types of padding or normalization. For this milestone, I looked into three specific popular models with custom preprocessing: Qwen2.5-VL, InternVL-2.5, and LlaVA-Next. In their open source implementations, these pipelines are not implemented efficiently, and convert back and forth between several image formats such as numpy, tensors, or Pillow/PIL for different transformations. 
+Historically, image pre-processing for machine learning models has been simple, with models hardcoded to a set image size, which may only need resizing and normalization. However, modern vision language model (VLM) pipelines work in the native pixel resolution of the image, and may perform more sophisticated pre-processing, such as dynamic tiling, patching, and multiple types of padding or normalization. For this milestone, I looked into three specific popular models with custom preprocessing: Qwen2.5-VL, InternVL-2.5, and LlaVA-Next. In their open source implementations, these pipelines are not implemented efficiently: they convert back and forth between several image formats such as numpy, tensors, or Pillow/PIL for different transformations, and dump the entire image to memory between each transformation. The goal of this project is to implement a DSL for efficient image pre-processing. The DSL will be based on Halide; I plan to seperate algorithm from schedule for the user.
+
+
 
 
 
@@ -29,6 +31,8 @@ Experiments to run:
 bar chart: Qwen Intern LlaVa legacy and fast vs runtime
 - data: randomized 256,1048 images
 - Hopefully also Multi-thread performance
+
+bar chart: same but W4
 
 bar chart: same but memory allocations
 
