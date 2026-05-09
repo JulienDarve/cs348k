@@ -9,14 +9,15 @@ from transformers import AutoImageProcessor
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
+MODEL_ID_QWEN = "Qwen/Qwen2.5-VL-7B-Instruct"
 MODEL_ID_INTERNVL = "OpenGVLab/InternVL2_5-8B"
 MODEL_ID_LLAVA = "llava-hf/llava-v1.6-mistral-7b-hf"
 
 
-def load_processors(model_id):
+def load_processors(model_id, **kwargs):
     """Return (slow_processor, fast_processor) for the given HuggingFace model_id."""
-    slow = AutoImageProcessor.from_pretrained(model_id, use_fast=False)
-    fast = AutoImageProcessor.from_pretrained(model_id, use_fast=True)
+    slow = AutoImageProcessor.from_pretrained(model_id, use_fast=False, **kwargs)
+    fast = AutoImageProcessor.from_pretrained(model_id, use_fast=True, **kwargs)
     return slow, fast
 
 
