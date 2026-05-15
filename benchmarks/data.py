@@ -22,14 +22,14 @@ def load_images(img_dir=None, n_images=32, img_size=(1024, 1024)):
 def load_images_w3(n_images=32, seed=0):
     """Return n_images RGB PIL images with random sizes, aspect ratio in [0.5, 2.0].
 
-    Width and height are sampled independently from [512, 2048], then the shorter
+    Width and height are sampled independently from [256, 1024], then the shorter
     side is rescaled so max/min <= 2.0. Seeded for reproducibility.
     """
     rng = np.random.default_rng(seed)
     images = []
     for _ in range(n_images):
-        w = int(rng.integers(256, 1047))
-        h = int(rng.integers(256, 1047))
+        w = int(rng.integers(256, 1024))
+        h = int(rng.integers(256, 1024))
         ratio = max(w, h) / min(w, h)
         if ratio > 2.0:
             if w > h:
