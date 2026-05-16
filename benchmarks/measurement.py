@@ -90,33 +90,42 @@ def output_shape(out):
     return "?"
 
 
-def profile_and_measure(name, fn, out_path, top_n=20):
-    """Run fn under cProfile, then measure peak RSS; write results to out_path."""
+def profile_fn(name, fn, out_path, top_n=20):
+    """Run fn under cProfile and write profile stats to out_path."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     pr = cProfile.Profile()
     pr.enable()
-    fn()
+    result = fn()
     pr.disable()
     buf = io.StringIO()
     pstats.Stats(pr, stream=buf).sort_stats("cumulative").print_stats(top_n)
-    profile_text = buf.getvalue()
-
-    gc.collect()
-    result, peak_rss = measure_peak_rss(fn)
 
     out_b = output_bytes(result)
-    ratio = peak_rss / out_b if out_b > 0 else float("nan")
-
     header = (
         f"=== {name} ===\n"
         f"output shape:    {output_shape(result)}\n"
-        f"output bytes:    {out_b/1e6:.2f} MB\n"
-        f"peak RSS delta:  {peak_rss/1e6:.2f} MB\n"
-        f"peak / output:   {ratio:.2f}x\n\n"
+        f"output bytes:    {out_b/1e6:.2f} MB\n\n"
     )
-    out_path.write_text(header + profile_text)
-    return peak_rss, out_b, ratio
+    out_path.write_text(header + buf.getvalue())
+
+
+def measure_memory(name, call, n_memory_warmup):
+    """Run optional warmup calls then measure peak RSS for a single call."""
+    for _ in range(n_memory_warmup):
+        call()
+
+    gc.collect()
+    result, peak_rss = measure_peak_rss(call)
+    out_b = output_bytes(result)
+    ratio = peak_rss / out_b if out_b > 0 else float("nan")
+
+    print(f"\n--- {name} ---")
+    print(f"  output shape:  {output_shape(result)}")
+    print(f"  output:        {out_b/1e6:.2f} MB")
+    print(f"  peak RSS:      {peak_rss/1e6:.2f} MB")
+    print(f"  peak / output: {ratio:.2f}x")
+    return ratio
 
 
 def env_info():

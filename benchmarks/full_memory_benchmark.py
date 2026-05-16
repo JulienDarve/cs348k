@@ -23,12 +23,11 @@ Usage:
 import os
 
 import argparse
-import gc
 
 import torch
 
 from data import load_images_w3, load_images_w4
-from measurement import env_info, measure_peak_rss, output_bytes, output_shape
+from measurement import env_info, measure_memory
 from models import (
     load_processors,
     get_internvl_manual_processor,
@@ -38,23 +37,6 @@ from models import (
 )
 
 N_MEMORY_WARMUP = 1
-
-
-def measure_memory(name, call, n_memory_warmup):
-    for _ in range(n_memory_warmup):
-        call()
-
-    gc.collect()
-    result, peak_rss = measure_peak_rss(call)
-    out_b = output_bytes(result)
-    ratio = peak_rss / out_b if out_b > 0 else float("nan")
-
-    print(f"\n--- {name} ---")
-    print(f"  output shape:  {output_shape(result)}")
-    print(f"  output:        {out_b/1e6:.2f} MB")
-    print(f"  peak RSS:      {peak_rss/1e6:.2f} MB")
-    print(f"  peak / output: {ratio:.2f}x")
-    return ratio
 
 
 def run_workload(label, images,

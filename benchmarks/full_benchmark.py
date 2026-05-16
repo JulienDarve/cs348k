@@ -35,7 +35,7 @@ from pathlib import Path
 import torch
 
 from data import load_images, load_images_w3, load_images_w4
-from measurement import time_fn, profile_and_measure, env_info
+from measurement import time_fn, profile_fn, env_info
 from models import (
     load_processors,
     get_internvl_manual_processor,
@@ -52,14 +52,11 @@ N_TIMED_W4 = 8
 
 def run(name, call, n_images, profile_path, n_warmup, n_timed):
     median_ms, p95_p50 = time_fn(call, n_warmup=n_warmup, n_timed=n_timed, desc=name)
-    peak, out_b, ratio = profile_and_measure(name, call, profile_path)
+    profile_fn(name, call, profile_path)
 
     print(f"\n--- {name} ---")
     print(f"  median:        {median_ms:8.2f} ms/batch ({median_ms/n_images:.3f} ms/img)")
     print(f"  p95 - p50:     {p95_p50:8.2f} ms")
-    print(f"  output:        {out_b/1e6:.2f} MB")
-    print(f"  peak alloc:    {peak/1e6:.2f} MB")
-    print(f"  peak / output: {ratio:.2f}x")
     print(f"  profile:       {profile_path}")
     return median_ms
 
