@@ -1,4 +1,4 @@
-"""Kernel benchmark — Qwen2.5-VL: HF fast, HF legacy, HF fast w/ bilinear, and v1.
+"""Kernel benchmark — Qwen2.5-VL: HF fast, HF legacy, HF fast w/ bilinear, v1, v2.
 
 Important note on memory measurement order:
   Memory benchmarks are run FIRST, before any timing loops or warmup. Timing
@@ -8,7 +8,7 @@ Important note on memory measurement order:
   with only the controlled n_memory_warmup calls as pre-measurement activity —
   gives the cleanest possible RSS delta without restructuring the kernel code.
 
-  For v1 specifically, Numba JIT-compiles on the first call (~30s). We perform
+  For v1/v2 specifically, Numba JIT-compiles on the first call (~30s). We perform
   one unmeasured compilation call before any measurement, then rely on the normal
   n_memory_warmup mechanism for the warm-cache measurement.
 
@@ -17,6 +17,7 @@ Processor variants (Qwen2.5-VL only):
   hf_fast:     AutoImageProcessor(use_fast=True)   — torchvision bicubic+antialias
   hf_bilinear: AutoImageProcessor(use_fast=True, resample=BILINEAR) — algorithm-matched
   v1:          kernels/qwen_v1_naive.py             — naive staged numba pipeline
+  v2:          kernels/qwen_v2_fused.py             — rescale+normalize fused into resize
 
 Workloads:
   W2: 32 images, all 1024×1024 (uniform size baseline).
@@ -52,6 +53,7 @@ from benchmarks.data import load_images, load_images_w3, load_images_w4
 from benchmarks.measurement import time_fn, measure_memory, env_info
 from benchmarks.models import load_processors, MODEL_ID_QWEN
 from kernels.qwen_v1_naive import qwen_v1
+from kernels.qwen_v2_fused import qwen_v2
 
 from transformers.image_utils import PILImageResampling
 
@@ -68,29 +70,46 @@ def _wrap_v1(images, proc):
     return {"pixel_values": pv, "image_grid_thw": grid}
 
 
-def make_calls(images, q_legacy, q_fast, proc_fast):
-    """Return an ordered list of (label, callable) for one workload."""
-    return [
+def _wrap_v2(images, proc):
+    """Call v2 and return an HF-compatible dict for output_bytes/output_shape."""
+    pv, grid = qwen_v2(images, min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
+    return {"pixel_values": pv, "image_grid_thw": grid}
+
+
+ALL_VARIANTS = ["hf_legacy", "hf_fast", "hf_bilinear", "v1", "v2"]
+
+
+def make_calls(images, q_legacy, q_fast, proc_fast, variants=None):
+    """Return an ordered list of (label, callable) for one workload.
+
+    variants: iterable of variant names to include; None means all.
+    """
+    if variants is None:
+        variants = ALL_VARIANTS
+    selected = set(variants)
+    all_calls = [
         ("hf_legacy",   lambda: q_legacy(images=images, return_tensors="np")),
         ("hf_fast",     lambda: q_fast(images=images, return_tensors="pt")),
         ("hf_bilinear", lambda: q_fast(images=images, return_tensors="pt",
                                        resample=PILImageResampling.BILINEAR)),
         ("v1",          lambda: _wrap_v1(images, proc_fast)),
+        ("v2",          lambda: _wrap_v2(images, proc_fast)),
     ]
+    return [(name, fn) for name, fn in all_calls if name in selected]
 
 
 # ---------------------------------------------------------------------------
 # Memory phase
 # ---------------------------------------------------------------------------
 
-def run_memory_workload(label, images, q_legacy, q_fast, proc_fast, n_memory_warmup):
+def run_memory_workload(label, images, q_legacy, q_fast, proc_fast, n_memory_warmup, variants):
     n = len(images)
     print(f"\n{'='*60}")
     print(f"[MEMORY] workload {label}: {n} images  (warmup={n_memory_warmup})")
     print(f"{'='*60}")
 
     results = {}
-    for name, call in make_calls(images, q_legacy, q_fast, proc_fast):
+    for name, call in make_calls(images, q_legacy, q_fast, proc_fast, variants):
         ratio = measure_memory(f"{name} ({label})", call, n_memory_warmup)
         results[name] = ratio
 
@@ -105,25 +124,28 @@ def run_memory_workload(label, images, q_legacy, q_fast, proc_fast, n_memory_war
 # Timing phase
 # ---------------------------------------------------------------------------
 
-def run_timing_workload(label, images, q_legacy, q_fast, proc_fast, n_warmup, n_timed):
+def run_timing_workload(label, images, q_legacy, q_fast, proc_fast, n_warmup, n_timed, variants):
     n = len(images)
     print(f"\n{'='*60}")
     print(f"[TIMING] workload {label}: {n} images  (warmup={n_warmup}, timed={n_timed})")
     print(f"{'='*60}")
 
     results = {}
-    for name, call in make_calls(images, q_legacy, q_fast, proc_fast):
+    for name, call in make_calls(images, q_legacy, q_fast, proc_fast, variants):
         median_ms, p95_p50 = time_fn(call, n_warmup=n_warmup, n_timed=n_timed, desc=name)
         results[name] = median_ms
         print(f"\n--- {name} ({label}) ---")
         print(f"  median:    {median_ms:8.2f} ms/batch ({median_ms/n:.3f} ms/img)")
         print(f"  p95-p50:   {p95_p50:8.2f} ms")
 
-    hf_fast_ms = results["hf_fast"]
+    hf_fast_ms = results.get("hf_fast")
     print(f"\n=== timing summary {label} ===")
     for name, ms in results.items():
-        ratio = ms / hf_fast_ms if hf_fast_ms > 0 else float("nan")
-        print(f"  {name:<20} {ms:8.2f} ms/batch  ({ratio:.2f}x vs hf_fast)")
+        if hf_fast_ms:
+            ratio = ms / hf_fast_ms if hf_fast_ms > 0 else float("nan")
+            print(f"  {name:<20} {ms:8.2f} ms/batch  ({ratio:.2f}x vs hf_fast)")
+        else:
+            print(f"  {name:<20} {ms:8.2f} ms/batch  ({ms/n:.3f} ms/img)")
 
     return results
 
@@ -134,7 +156,7 @@ def run_timing_workload(label, images, q_legacy, q_fast, proc_fast, n_warmup, n_
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Kernel benchmark: HF fast/legacy/bilinear vs v1 on W2, W3, W4.")
+        description="Kernel benchmark: HF fast/legacy/bilinear vs v1/v2 on W2, W3, W4.")
     ap.add_argument("--num-threads", type=int, default=1, metavar="N",
                     help="OMP/MKL/torch intra-op thread count (default: 1).")
     ap.add_argument("--n-memory-warmup", type=int, default=N_MEMORY_WARMUP,
@@ -152,6 +174,10 @@ def main():
     ap.add_argument("--workloads", nargs="+", choices=["W2", "W3", "W4"],
                     default=["W2", "W3", "W4"], metavar="W",
                     help="Which workloads to run (default: W2 W3 W4).")
+    ap.add_argument("--variants", nargs="+", choices=ALL_VARIANTS,
+                    default=None, metavar="V",
+                    help="Which processor variants to benchmark (default: all). "
+                         f"Choices: {ALL_VARIANTS}.")
     args = ap.parse_args()
 
     if args.timing_only and args.memory_only:
@@ -181,13 +207,21 @@ def main():
     if images_w3: print(f"W3: {len(images_w3)} images, sizes e.g. {[img.size for img in images_w3[:3]]}")
     if images_w4: print(f"W4: {len(images_w4)} images @ {images_w4[0].size}")
 
+    variants = args.variants  # None means all
+
     # Trigger Numba JIT compilation before any measurement using the first available workload.
-    # This call is intentionally unmeasured; RSS from compilation is not meaningful.
+    # These calls are intentionally unmeasured; RSS from compilation is not meaningful.
     first_images = images_w2 or images_w3 or images_w4
     assert first_images is not None
-    print("\nWarming up Numba JIT for v1 (first call compiles, ~30s)...")
-    _wrap_v1(first_images[:1], proc_fast)
-    print("Numba JIT ready.")
+    needs_v1 = variants is None or "v1" in variants
+    needs_v2 = variants is None or "v2" in variants
+    if needs_v1 or needs_v2:
+        print("\nWarming up Numba JIT for v1/v2 (first call compiles, ~30s)...")
+        if needs_v1:
+            _wrap_v1(first_images[:1], proc_fast)
+        if needs_v2:
+            _wrap_v2(first_images[:1], proc_fast)
+        print("Numba JIT ready.")
 
     all_workloads = {
         "W2": (images_w2, args.n_warmup,    args.n_timed),
@@ -204,7 +238,7 @@ def main():
         print("# PHASE 1: MEMORY  (running before timing to keep RSS clean)")
         print("#"*60)
         for label, images, _, _ in workloads:
-            run_memory_workload(label, images, q_legacy, q_fast, proc_fast, n_memory_warmup)
+            run_memory_workload(label, images, q_legacy, q_fast, proc_fast, n_memory_warmup, variants)
 
     # -----------------------------------------------------------------------
     # Phase 2: Timing — runs after memory so allocator warmup doesn't affect RSS.
@@ -214,7 +248,7 @@ def main():
         print("# PHASE 2: TIMING")
         print("#"*60)
         for label, images, n_warmup, n_timed in workloads:
-            run_timing_workload(label, images, q_legacy, q_fast, proc_fast, n_warmup, n_timed)
+            run_timing_workload(label, images, q_legacy, q_fast, proc_fast, n_warmup, n_timed, variants)
 
 
 if __name__ == "__main__":

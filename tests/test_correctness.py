@@ -76,6 +76,7 @@ antialias=False via the contextmanager below) so the (b)→(c) gap isolates the
 schedule win.
 """
 
+import argparse
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -109,6 +110,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from benchmarks.data import load_images_w3, load_images_smooth
 from benchmarks.models import load_processors, MODEL_ID_QWEN
 from kernels.qwen_v1_naive import qwen_v1, smart_resize_dims
+from kernels.qwen_v2_fused import qwen_v2
 
 
 def check(name, passed, msg=""):
@@ -117,7 +119,26 @@ def check(name, passed, msg=""):
     return passed
 
 
+def _run_kernel(version, images, proc):
+    """Run the selected kernel version on images and return (pixel_values, grid)."""
+    kw = dict(min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
+    if version == "v1":
+        return qwen_v1(images, **kw)
+    if version == "v2":
+        return qwen_v2(images, **kw)
+    raise ValueError(f"Unknown version: {version}")
+
+
 def main():
+    ap = argparse.ArgumentParser(
+        description="Correctness harness for hand-fused Qwen kernel versions.")
+    ap.add_argument("--version", choices=["v1", "v2"], default="v1",
+                    help="Kernel version to test against HF (default: v1). "
+                         "Tests 1-7 run on this version; test 8 always cross-checks v2 vs v1.")
+    args = ap.parse_args()
+    ver = args.version
+
+    print(f"Testing version: {ver}")
     print("Loading images and HF fast processor...")
     images = load_images_w3(n_images=4, seed=0)
     _, proc = load_processors(MODEL_ID_QWEN)
@@ -139,23 +160,23 @@ def main():
         all_passed = all_passed and ok
 
     # ------------------------------------------------------------------
-    # 2–4. v1 output vs HF fast
+    # 2–4. <ver> output vs HF fast (noise images)
     # ------------------------------------------------------------------
-    print("\n--- v1 vs HF fast ---")
+    print(f"\n--- {ver} vs HF fast ---")
     print("  Running HF fast processor...")
     hf_out = proc(images=images, return_tensors="pt")
     hf_pv   = hf_out["pixel_values"].numpy()
     hf_grid = hf_out["image_grid_thw"].numpy()
 
-    print("  Running v1 (numba JIT compile on first call, ~30s)...")
-    pv, grid = qwen_v1(images, min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
+    print(f"  Running {ver} (numba JIT compile on first call, ~30s)...")
+    pv, grid = _run_kernel(ver, images, proc)
 
     ok = check("output shape", pv.shape == hf_pv.shape,
-               f"v1={pv.shape} HF={hf_pv.shape}" if pv.shape != hf_pv.shape else "")
+               f"{ver}={pv.shape} HF={hf_pv.shape}" if pv.shape != hf_pv.shape else "")
     all_passed = all_passed and ok
 
     ok = check("image_grid_thw", np.array_equal(grid, hf_grid),
-               f"\n    v1={grid}\n    HF={hf_grid}" if not np.array_equal(grid, hf_grid) else "")
+               f"\n    {ver}={grid}\n    HF={hf_grid}" if not np.array_equal(grid, hf_grid) else "")
     all_passed = all_passed and ok
 
     max_diff = float(np.max(np.abs(pv - hf_pv)))
@@ -164,25 +185,24 @@ def main():
     all_passed = all_passed and ok
 
     # ------------------------------------------------------------------
-    # 5. v1 vs HF fast on smooth (low-frequency) images
+    # 5. <ver> vs HF fast on smooth (low-frequency) images
     #    Bilinear and bicubic agree tightly when the input is band-limited,
     #    so this is the real correctness check on pixel values.
     # ------------------------------------------------------------------
-    print("\n--- v1 vs HF fast (smooth images) ---")
+    print(f"\n--- {ver} vs HF fast (smooth images) ---")
     smooth_images = load_images_smooth(n_images=4, seed=0)
     hf_out_s = proc(images=smooth_images, return_tensors="pt")
     hf_pv_s   = hf_out_s["pixel_values"].numpy()
     hf_grid_s = hf_out_s["image_grid_thw"].numpy()
 
-    pv_s, grid_s = qwen_v1(smooth_images,
-                           min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
+    pv_s, grid_s = _run_kernel(ver, smooth_images, proc)
 
     ok = check("output shape", pv_s.shape == hf_pv_s.shape,
-               f"v1={pv_s.shape} HF={hf_pv_s.shape}" if pv_s.shape != hf_pv_s.shape else "")
+               f"{ver}={pv_s.shape} HF={hf_pv_s.shape}" if pv_s.shape != hf_pv_s.shape else "")
     all_passed = all_passed and ok
 
     ok = check("image_grid_thw", np.array_equal(grid_s, hf_grid_s),
-               f"\n    v1={grid_s}\n    HF={hf_grid_s}" if not np.array_equal(grid_s, hf_grid_s) else "")
+               f"\n    {ver}={grid_s}\n    HF={hf_grid_s}" if not np.array_equal(grid_s, hf_grid_s) else "")
     all_passed = all_passed and ok
 
     max_diff_s = float(np.max(np.abs(pv_s - hf_pv_s)))
@@ -190,13 +210,13 @@ def main():
     all_passed = all_passed and ok
 
     # ------------------------------------------------------------------
-    # 6. v1 vs HF fast forced to BILINEAR (algorithm-matched comparison)
+    # 6. <ver> vs HF fast forced to BILINEAR (algorithm-matched comparison)
     #    Removes the bicubic-vs-bilinear confound: any remaining gap is
     #    just torchvision's antialias filter vs our naive 4-tap bilinear.
     #    On smooth inputs both should be effectively identical (atol=0.05).
     #    On noise the antialias filter still widens the gap, so use atol=0.3.
     # ------------------------------------------------------------------
-    print("\n--- v1 vs HF fast (BILINEAR, algorithm-matched) ---")
+    print(f"\n--- {ver} vs HF fast (BILINEAR, algorithm-matched) ---")
     from transformers.image_utils import PILImageResampling
 
     # 6a. smooth images — tight tolerance
@@ -206,11 +226,11 @@ def main():
     hf_grid_bl_s = hf_out_bl_s["image_grid_thw"].numpy()
 
     ok = check("smooth: output shape", pv_s.shape == hf_pv_bl_s.shape,
-               f"v1={pv_s.shape} HF={hf_pv_bl_s.shape}" if pv_s.shape != hf_pv_bl_s.shape else "")
+               f"{ver}={pv_s.shape} HF={hf_pv_bl_s.shape}" if pv_s.shape != hf_pv_bl_s.shape else "")
     all_passed = all_passed and ok
 
     ok = check("smooth: image_grid_thw", np.array_equal(grid_s, hf_grid_bl_s),
-               f"\n    v1={grid_s}\n    HF={hf_grid_bl_s}" if not np.array_equal(grid_s, hf_grid_bl_s) else "")
+               f"\n    {ver}={grid_s}\n    HF={hf_grid_bl_s}" if not np.array_equal(grid_s, hf_grid_bl_s) else "")
     all_passed = all_passed and ok
 
     max_diff_bl_s = float(np.max(np.abs(pv_s - hf_pv_bl_s)))
@@ -229,14 +249,14 @@ def main():
     all_passed = all_passed and ok
 
     # ------------------------------------------------------------------
-    # 7. v1 vs HF fast forced to BILINEAR + antialias=False
+    # 7. <ver> vs HF fast forced to BILINEAR + antialias=False
     #    Fully algorithm-matched: same kernel, same tap count, no filter.
     #    Any remaining gap is purely float32 accumulation order (different
     #    SIMD reduction in torchvision vs our njit loops, different rounding
     #    point in HF's fused rescale_and_normalize vs our two-pass version).
     #    Expected tight on both smooth and noise inputs (atol=0.05).
     # ------------------------------------------------------------------
-    print("\n--- v1 vs HF fast (BILINEAR, antialias=False, fully matched) ---")
+    print(f"\n--- {ver} vs HF fast (BILINEAR, antialias=False, fully matched) ---")
     with _hf_no_antialias():
         hf_out_na_s = proc(images=smooth_images, return_tensors="pt",
                            resample=PILImageResampling.BILINEAR)
@@ -253,6 +273,40 @@ def main():
     max_diff_na_n = float(np.max(np.abs(pv - hf_pv_na_n)))
     ok = check("noise: pixel_values atol=0.05", max_diff_na_n <= 0.05,
                f"max_diff={max_diff_na_n:.4f}")
+    all_passed = all_passed and ok
+
+    # ------------------------------------------------------------------
+    # 8. v2 vs v1 — always runs regardless of --version
+    #    Same algorithm, different schedule: diffs are accumulation-order
+    #    noise only. rtol=1e-4 is the correctness gate per the design doc.
+    # ------------------------------------------------------------------
+    print("\n--- v2 vs v1 (cross-version check, always runs) ---")
+    kw = dict(min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
+    pv1_n, grid1_n = qwen_v1(images, **kw)
+    pv1_s, grid1_s = qwen_v1(smooth_images, **kw)
+    pv2_n, grid2_n = qwen_v2(images, **kw)
+    pv2_s, grid2_s = qwen_v2(smooth_images, **kw)
+
+    ok = check("output shape (noise)", pv2_n.shape == pv1_n.shape,
+               f"v2={pv2_n.shape} v1={pv1_n.shape}" if pv2_n.shape != pv1_n.shape else "")
+    all_passed = all_passed and ok
+
+    ok = check("image_grid_thw (noise)", np.array_equal(grid2_n, grid1_n),
+               f"\n    v2={grid2_n}\n    v1={grid1_n}" if not np.array_equal(grid2_n, grid1_n) else "")
+    all_passed = all_passed and ok
+
+    max_diff_v2_n = float(np.max(np.abs(pv2_n - pv1_n)))
+    ok = check("pixel_values rtol=1e-4 (noise)", max_diff_v2_n <= 1e-4,
+               f"max_diff={max_diff_v2_n:.2e}")
+    all_passed = all_passed and ok
+
+    ok = check("output shape (smooth)", pv2_s.shape == pv1_s.shape,
+               f"v2={pv2_s.shape} v1={pv1_s.shape}" if pv2_s.shape != pv1_s.shape else "")
+    all_passed = all_passed and ok
+
+    max_diff_v2_s = float(np.max(np.abs(pv2_s - pv1_s)))
+    ok = check("pixel_values rtol=1e-4 (smooth)", max_diff_v2_s <= 1e-4,
+               f"max_diff={max_diff_v2_s:.2e}")
     all_passed = all_passed and ok
 
     print(f"\n{'All checks passed.' if all_passed else 'Some checks FAILED.'}")
