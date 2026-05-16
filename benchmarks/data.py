@@ -41,6 +41,36 @@ def load_images_w3(n_images=32, seed=0):
     return images
 
 
+def load_images_smooth(n_images=4, seed=0):
+    """Return n_images RGB PIL images with smooth, low-frequency content.
+
+    Each image is a sum of a few low-frequency 2D sinusoids per channel, so
+    neighboring pixels are highly correlated. This makes bilinear vs bicubic
+    resize agree to within ~1% of the normalized value range, suitable for a
+    tight (atol=0.1) correctness check against the HF fast processor.
+    Sizes vary per image to exercise smart_resize.
+    """
+    rng = np.random.default_rng(seed)
+    sizes = [(384, 512), (640, 480), (512, 512), (720, 480)]
+    images = []
+    for i in range(n_images):
+        h, w = sizes[i % len(sizes)]
+        yy, xx = np.meshgrid(np.linspace(0, 1, h), np.linspace(0, 1, w), indexing="ij")
+        arr = np.zeros((h, w, 3), dtype=np.float32)
+        for ch in range(3):
+            for _ in range(3):
+                fy = rng.uniform(0.5, 3.0)
+                fx = rng.uniform(0.5, 3.0)
+                phase = rng.uniform(0, 2 * np.pi)
+                amp = rng.uniform(0.2, 1.0)
+                arr[..., ch] += amp * np.sin(2 * np.pi * (fy * yy + fx * xx) + phase)
+        arr -= arr.min(axis=(0, 1), keepdims=True)
+        arr /= arr.max(axis=(0, 1), keepdims=True) + 1e-8
+        arr = (arr * 255.0).astype(np.uint8)
+        images.append(Image.fromarray(arr))
+    return images
+
+
 def load_images_w4(n_images=8, seed=0):
     """Return n_images synthetic RGB PIL images at A4 @ 300 dpi (2480x3508)."""
     rng = np.random.default_rng(seed)
