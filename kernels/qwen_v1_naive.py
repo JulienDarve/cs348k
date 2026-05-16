@@ -27,7 +27,7 @@ from kernels.patch_coords import patch_linear_index, patch_output_offset
 
 PATCH_SIZE = 14
 TEMPORAL_PATCH_SIZE = 2
-FACTOR = 28
+FACTOR = 14             # smart_resize factor = patch_size (not merge_size * patch_size)
 MIN_PIXELS = 3136       # 4 * 28 * 28  (processor default)
 MAX_PIXELS = 12845056   # 16384 * 28 * 28
 

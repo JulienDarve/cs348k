@@ -59,11 +59,9 @@ def main():
     # ------------------------------------------------------------------
     print("\n--- v1 vs HF fast ---")
     print("  Running HF fast processor...")
-    hf_out = proc(images=images, return_tensors="np")
-    hf_pv   = hf_out["pixel_values"]
-    hf_grid = hf_out["image_grid_thw"]
-    if hasattr(hf_grid, "numpy"):
-        hf_grid = hf_grid.numpy()
+    hf_out = proc(images=images, return_tensors="pt")
+    hf_pv   = hf_out["pixel_values"].numpy()
+    hf_grid = hf_out["image_grid_thw"].numpy()
 
     print("  Running v1 (numba JIT compile on first call, ~30s)...")
     pv, grid = qwen_v1(images, min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
