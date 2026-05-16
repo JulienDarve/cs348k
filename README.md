@@ -1,6 +1,5 @@
 # cs348k
 
-# Note for Milestone 1
 Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 
@@ -12,7 +11,7 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 `srun -c 8 --mem=16G --pty bash`
 
-## Sample Setup
+## Quickstart
 
 `cd cs348k`
 
@@ -24,7 +23,8 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 ## Repository structure
 
-`benchmarks/` folder (Milestone 1):
+### `benchmarks/`
+Benchmarks existing implementations (Milestone 1)
 
 - `data.py`: Contains `load_images` function. All iamge loading code should be here.
 
@@ -40,11 +40,9 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 - `full_memory_benchmark_single_thread.py`: Runs the full memory benchmark results (there is a bug in full_benchmark.py that makes its memory results invalid; this is the file that re-runs memory by itself, correctly).
 
-`visualizations/` folder: contains Jupyter notebooks for creating visualizations from the output data.
 
-`notes/` Notes about intermediate results
-
-`kernels/` folder: Hand-fused Qwen2.5-VL preprocessor kernels (Milestone 2).
+### `kernels/`
+Hand-fused Qwen2.5-VL preprocessor kernels (Milestone 2).
 
 - `bilinear.py`: Shared `@njit` bilinear sampling and resize primitives.
 
@@ -52,7 +50,13 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 - `qwen_v1_naive.py`: v1 naive correctness baseline — each stage (`smart_resize_dims`, `bilinear_resize`, `rescale`, `normalize`, `patchify`) is its own function with an intermediate buffer.
 
-`tests/` folder:
+### `visualizations/`
+Contains Jupyter notebooks for creating visualizations from the output data.
+
+### `results/` 
+Notes about intermediate results
+
+### `tests/`
 
 - `test_libs.py` tests that libaries load
 

@@ -101,15 +101,15 @@ def normalize(img, mean, std):
 # ---------------------------------------------------------------------------
 
 @njit(cache=True)
-def patchify(img, patch_size, temporal_patch_size):
+def patchify(img, patch_size, temporal_patch_size, merge_size):
     """Convert normalized (H, W, C) float32 image to Qwen patch matrix.
 
-    Output shape: (N_patches, temporal_patch_size * C * patch_size * patch_size)
+    Output shape: (N_patches, C * temporal_patch_size * patch_size * patch_size)
     where N_patches = (H // patch_size) * (W // patch_size).
 
-    Replicates the Qwen2VLImageProcessor patchify: tile image along a synthetic
-    temporal axis (temporal_patch_size copies), then extract spatial patches with
-    axis ordering (T, C, P_y, P_x) in the column dimension.
+    Replicates the Qwen2VL fast patchify: tile image along a synthetic temporal
+    axis (temporal_patch_size copies), emit patches in merge-block row order
+    (gh//m, gw//m, mh, mw), with column axis ordering (C, T, P_y, P_x).
     """
     h, w, c = img.shape
     ph = h // patch_size
@@ -120,7 +120,7 @@ def patchify(img, patch_size, temporal_patch_size):
 
     for i_ph in range(ph):
         for i_pw in range(pw):
-            p_idx = patch_linear_index(i_ph, i_pw, pw)
+            p_idx = patch_linear_index(i_ph, i_pw, pw, merge_size)
             for t in range(temporal_patch_size):
                 for ch in range(c):
                     for py in range(patch_size):
@@ -167,7 +167,7 @@ def qwen_v1(images, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS):
         normalized = normalize(rescaled, QWEN_MEAN, QWEN_STD)
 
         # ALGORITHM: spatial patchify + temporal tile  →  alloc 4
-        patched = patchify(normalized, PATCH_SIZE, TEMPORAL_PATCH_SIZE)
+        patched = patchify(normalized, PATCH_SIZE, TEMPORAL_PATCH_SIZE, MERGE_SIZE)
 
         outputs.append(patched)
         grid_thw.append((1,                    # T=1 temporal slot per still image
