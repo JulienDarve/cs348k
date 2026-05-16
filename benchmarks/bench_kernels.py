@@ -149,6 +149,9 @@ def main():
                     help="Skip timing phase.")
     ap.add_argument("--timing-only", action="store_true",
                     help="Skip memory phase (RSS results will be tainted by timing warmup).")
+    ap.add_argument("--workloads", nargs="+", choices=["W2", "W3", "W4"],
+                    default=["W2", "W3", "W4"], metavar="W",
+                    help="Which workloads to run (default: W2 W3 W4).")
     args = ap.parse_args()
 
     if args.timing_only and args.memory_only:
@@ -169,25 +172,29 @@ def main():
     proc_fast = q_fast  # alias for clarity in _wrap_v1 calls
     print(f"\nLoaded: {MODEL_ID_QWEN} (legacy, fast)")
 
-    # Load workloads
-    images_w2 = load_images(n_images=32, img_size=(1024, 1024))
-    images_w3 = load_images_w3()
-    images_w4 = load_images_w4()
-    print(f"\nW2: {len(images_w2)} images @ {images_w2[0].size}")
-    print(f"W3: {len(images_w3)} images, sizes e.g. {[img.size for img in images_w3[:3]]}")
-    print(f"W4: {len(images_w4)} images @ {images_w4[0].size}")
+    # Load only the requested workloads
+    selected = set(args.workloads)
+    images_w2 = load_images(n_images=32, img_size=(1024, 1024)) if "W2" in selected else None
+    images_w3 = load_images_w3()                                 if "W3" in selected else None
+    images_w4 = load_images_w4()                                 if "W4" in selected else None
+    if images_w2: print(f"\nW2: {len(images_w2)} images @ {images_w2[0].size}")
+    if images_w3: print(f"W3: {len(images_w3)} images, sizes e.g. {[img.size for img in images_w3[:3]]}")
+    if images_w4: print(f"W4: {len(images_w4)} images @ {images_w4[0].size}")
 
-    # Trigger Numba JIT compilation before any measurement.
+    # Trigger Numba JIT compilation before any measurement using the first available workload.
     # This call is intentionally unmeasured; RSS from compilation is not meaningful.
+    first_images = images_w2 or images_w3 or images_w4
+    assert first_images is not None
     print("\nWarming up Numba JIT for v1 (first call compiles, ~30s)...")
-    _wrap_v1(images_w2[:1], proc_fast)
+    _wrap_v1(first_images[:1], proc_fast)
     print("Numba JIT ready.")
 
-    workloads = [
-        ("W2", images_w2, args.n_warmup,    args.n_timed),
-        ("W3", images_w3, args.n_warmup,    args.n_timed),
-        ("W4", images_w4, args.n_warmup_w4, args.n_timed_w4),
-    ]
+    all_workloads = {
+        "W2": (images_w2, args.n_warmup,    args.n_timed),
+        "W3": (images_w3, args.n_warmup,    args.n_timed),
+        "W4": (images_w4, args.n_warmup_w4, args.n_timed_w4),
+    }
+    workloads = [(label, *all_workloads[label]) for label in args.workloads]
 
     # -----------------------------------------------------------------------
     # Phase 1: Memory — MUST run before timing to avoid allocator pool buildup.
