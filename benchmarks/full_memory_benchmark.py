@@ -1,5 +1,21 @@
 """Full memory baseline — Qwen2.5-VL, InternVL2.5, and LLaVA on W2, W3 and W4.
 
+Important note:
+  Do not use benchmarks/full_benchmark.py for memory numbers. That script is
+  the runtime/cProfile benchmark, and the earlier memory measurements taken
+  from it were invalid because they were mixed into the same long-lived process
+  after repeated warmup, timing, and profiling calls. RSS is process-wide, so
+  allocator pools and intermediate buffers retained by previous variants or
+  workloads contaminated the baseline and could make the peak delta look too
+  small, too large, or even zero.
+
+  This file exists as a separate benchmark so memory is measured in the cleanest
+  protocol we can use without changing the processor implementations: run only
+  one processor call under measure_peak_rss(), avoid the timing loop and
+  cProfile overhead, and optionally perform a controlled unmeasured warmup
+  immediately before the measurement. This keeps the runtime benchmark and the
+  memory benchmark separate, reproducible, and easier to interpret.
+
 Workloads:
   W2: 32 images, all 1024×1024 (uniform size baseline).
   W3: 32 images with random sizes and aspect ratio in [0.5, 2.0].
