@@ -26,12 +26,22 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 ### `benchmarks/`
 Benchmarks existing implementations (Milestone 1)
 
+#### Core files
+- `bench_kernels.py`: Benchmarks the Milestone 2 Qwen kernel implementations against HF legacy, HF fast, and HF bilinear baselines.
+
+- `full_benchmark.py`: Runs the full benchmark for n threads
+
+- `full_memory_benchmark.py`: Runs the full memory benchmark for configurable thread counts in a separate clean memory-measurement process.
+
+#### Infrastructure 
+
 - `data.py`: Contains `load_images` function. All iamge loading code should be here.
 
 - `measurement.py`: Timing and profiling harness using `cProfile` and `RSS`. All profiling code should be here.
 
 - `models.py`: Loads the relevant model pre-processing code from huggingface. All huggingface model/pre-processing code fetching should be done here.
 
+#### Testing and development
 - `phase0.py`: Sanity-check benchmark for Qwen2.5-VL legacy vs fast preprocessing on W2.
 
 - `phase1.py`: Adds cProfile and memory profiling for the Qwen2.5-VL W2 benchmark.
@@ -40,13 +50,7 @@ Benchmarks existing implementations (Milestone 1)
 
 - `phase3.py`: Benchmarks Qwen2.5-VL and InternVL2.5 preprocessing on mixed-size W3 and large-image W4 workloads.
 
-- `bench_kernels.py`: Benchmarks the Milestone 2 Qwen kernel implementations against HF legacy, HF fast, and HF bilinear baselines.
-
 - `full_benchmark_single_thread.py`: Runs the full benchmark results on a single thread
-
-- `full_benchmark.py`: Runs the full benchmark for n threads
-
-- `full_memory_benchmark.py`: Runs the full memory benchmark for configurable thread counts in a separate clean memory-measurement process.
 
 - `full_memory_benchmark_single_thread.py`: Runs the full memory benchmark results (there is a bug in full_benchmark.py that makes its memory results invalid; this is the file that re-runs memory by itself, correctly).
 
@@ -72,7 +76,7 @@ Contains Jupyter notebooks for creating visualizations from the output data.
 ### `results/` 
 Notes about intermediate results
 
-- `bench_kernels_v1_results.md`: Summarizes the Milestone 2 `bench_kernels.py` v1 timing and memory results.
+- `bench_kernels_results.md`: Summarizes the Milestone 2 `bench_kernels.py` kernel timing and memory results.
 
 - `full_benchmarks_multi_thread_results.md`: Summarizes Milestone 1 timing and memory results for the multi-thread benchmark runs.
 
