@@ -4,7 +4,11 @@ Checks:
   1. smart_resize_dims matches HF fast for representative sizes.
   2. v1 output shape matches HF fast (same total_patches, same patch_dim).
   3. v1 image_grid_thw matches HF fast (same spatial patch counts).
-  4. v1 pixel_values are numerically close to HF fast pixel_values.
+  4. v1 pixel_values are numerically close to HF fast pixel_values (default
+     BICUBIC+antialias, smooth + noise inputs).
+  5. v1 pixel_values vs HF fast forced to BILINEAR (algorithm-matched);
+     this is the strict correctness check — any gap is just torchvision's
+     antialias filter, not an interpolation-method mismatch.
 
 Note on tolerance: HF fast uses BICUBIC + antialias; v1 uses bilinear (as
 specified in kernel_implementation.md). On smooth (band-limited) inputs the
@@ -106,6 +110,45 @@ def main():
 
     max_diff_s = float(np.max(np.abs(pv_s - hf_pv_s)))
     ok = check("pixel_values atol=0.1", max_diff_s <= 0.1, f"max_diff={max_diff_s:.4f}")
+    all_passed = all_passed and ok
+
+    # ------------------------------------------------------------------
+    # 6. v1 vs HF fast forced to BILINEAR (algorithm-matched comparison)
+    #    Removes the bicubic-vs-bilinear confound: any remaining gap is
+    #    just torchvision's antialias filter vs our naive 4-tap bilinear.
+    #    On smooth inputs both should be effectively identical (atol=0.05).
+    #    On noise the antialias filter still widens the gap, so use atol=0.3.
+    # ------------------------------------------------------------------
+    print("\n--- v1 vs HF fast (BILINEAR, algorithm-matched) ---")
+    from transformers.image_utils import PILImageResampling
+
+    # 6a. smooth images — tight tolerance
+    hf_out_bl_s = proc(images=smooth_images, return_tensors="pt",
+                       resample=PILImageResampling.BILINEAR)
+    hf_pv_bl_s = hf_out_bl_s["pixel_values"].numpy()
+    hf_grid_bl_s = hf_out_bl_s["image_grid_thw"].numpy()
+
+    ok = check("smooth: output shape", pv_s.shape == hf_pv_bl_s.shape,
+               f"v1={pv_s.shape} HF={hf_pv_bl_s.shape}" if pv_s.shape != hf_pv_bl_s.shape else "")
+    all_passed = all_passed and ok
+
+    ok = check("smooth: image_grid_thw", np.array_equal(grid_s, hf_grid_bl_s),
+               f"\n    v1={grid_s}\n    HF={hf_grid_bl_s}" if not np.array_equal(grid_s, hf_grid_bl_s) else "")
+    all_passed = all_passed and ok
+
+    max_diff_bl_s = float(np.max(np.abs(pv_s - hf_pv_bl_s)))
+    ok = check("smooth: pixel_values atol=0.05", max_diff_bl_s <= 0.05,
+               f"max_diff={max_diff_bl_s:.4f}")
+    all_passed = all_passed and ok
+
+    # 6b. noise images — looser tolerance (antialias filter still differs)
+    hf_out_bl_n = proc(images=images, return_tensors="pt",
+                       resample=PILImageResampling.BILINEAR)
+    hf_pv_bl_n = hf_out_bl_n["pixel_values"].numpy()
+
+    max_diff_bl_n = float(np.max(np.abs(pv - hf_pv_bl_n)))
+    ok = check("noise: pixel_values atol=0.3", max_diff_bl_n <= 0.3,
+               f"max_diff={max_diff_bl_n:.4f}")
     all_passed = all_passed and ok
 
     print(f"\n{'All checks passed.' if all_passed else 'Some checks FAILED.'}")
