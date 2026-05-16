@@ -32,13 +32,27 @@ Benchmarks existing implementations (Milestone 1)
 
 - `models.py`: Loads the relevant model pre-processing code from huggingface. All huggingface model/pre-processing code fetching should be done here.
 
-- `phase[n].py`: Experiment and results from phase `n` (sanity checks, explained in MILESTONE_1.md)
+- `phase0.py`: Sanity-check benchmark for Qwen2.5-VL legacy vs fast preprocessing on W2.
+
+- `phase1.py`: Adds cProfile and memory profiling for the Qwen2.5-VL W2 benchmark.
+
+- `phase2.py`: Benchmarks InternVL2.5 HF and manual preprocessing to test whether the bottleneck generalizes.
+
+- `phase3.py`: Benchmarks Qwen2.5-VL and InternVL2.5 preprocessing on mixed-size W3 and large-image W4 workloads.
+
+- `bench_kernels.py`: Benchmarks the Milestone 2 Qwen kernel implementations against HF legacy, HF fast, and HF bilinear baselines.
 
 - `full_benchmark_single_thread.py`: Runs the full benchmark results on a single thread
 
 - `full_benchmark.py`: Runs the full benchmark for n threads
 
+- `full_memory_benchmark.py`: Runs the full memory benchmark for configurable thread counts in a separate clean memory-measurement process.
+
 - `full_memory_benchmark_single_thread.py`: Runs the full memory benchmark results (there is a bug in full_benchmark.py that makes its memory results invalid; this is the file that re-runs memory by itself, correctly).
+
+- `test_llava.py`: Quick LLaVA-NeXT W3 timing, memory, and output-shape test for legacy and fast processors.
+
+- `test_measurement.py`: Quick Qwen2.5-VL W3 test for the timing and RSS measurement helpers.
 
 
 ### `kernels/`
@@ -50,11 +64,23 @@ Hand-fused Qwen2.5-VL preprocessor kernels (Milestone 2).
 
 - `qwen_v1_naive.py`: v1 naive correctness baseline — each stage (`smart_resize_dims`, `bilinear_resize`, `rescale`, `normalize`, `patchify`) is its own function with an intermediate buffer.
 
+- `qwen_v2_fused.py`: v2 pointwise fusion — `rescale` and `normalize` inlined into the `bilinear_resize` pixel loop (`compute_at = inline`), eliminating two intermediate buffers.
+
 ### `visualizations/`
 Contains Jupyter notebooks for creating visualizations from the output data.
 
 ### `results/` 
 Notes about intermediate results
+
+- `bench_kernels_v1_results.md`: Summarizes the Milestone 2 `bench_kernels.py` v1 timing and memory results.
+
+- `full_benchmarks_multi_thread_results.md`: Summarizes Milestone 1 timing and memory results for the multi-thread benchmark runs.
+
+- `full_benchmarks_single_thread_results.md`: Summarizes Milestone 1 timing and memory results for the single-thread benchmark runs.
+
+- `full_profiling_output_multi_thread.md`: Contains the detailed cProfile output from the multi-thread profiling runs.
+
+- `full_profiling_output_single_thread.md`: Contains the detailed cProfile output from the single-thread profiling runs.
 
 ### `tests/`
 
