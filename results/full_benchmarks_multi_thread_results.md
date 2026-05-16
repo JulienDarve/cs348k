@@ -1,0 +1,35 @@
+# W2
+
+| Model | Median ms/batch | Median ms/img | p95 - p50 | Output | Peak RSS | Peak / Output |
+|---|---:|---:|---:|---:|---:|---:|
+| Qwen Fast | 1212.78 | 37.900 | 4.21 | N/A | N/A | N/A |
+| Qwen Legacy | 2591.78 | 80.993 | 14.34 | N/A | N/A | N/A |
+| Intern Fast | 276.37 | 8.637 | 4.28 | N/A | N/A | N/A |
+| Intern Legacy | 584.49 | 18.265 | 3.98 | N/A | N/A | N/A |
+| Intern Manual | 2142.65 | 66.958 | 1314.22 | N/A | N/A | N/A |
+| LLaVA Fast | 664.12 | 20.754 | 47.87 | N/A | N/A | N/A |
+| LLaVA Legacy | 2738.22 | 85.569 | 137.63 | N/A | N/A | N/A |
+
+# W3
+
+| Model | Median ms/batch | Median ms/img | p95 - p50 | Output | Peak RSS | Peak / Output |
+|---|---:|---:|---:|---:|---:|---:|
+| Qwen Fast | 499.51 | 15.610 | 18.96 | 333.42 MB | 679.65 MB | 2.04x |
+| Qwen Legacy | 1566.91 | 48.966 | 105.22 | 333.42 MB | 535.84 MB | 1.61x |
+| Intern Fast | 241.21 | 7.538 | 14.10 | 77.07 MB | 77.08 MB | 1.00x |
+| Intern Legacy | 569.64 | 17.801 | 35.03 | 77.07 MB | 77.08 MB | 1.00x |
+| Intern Manual | 1675.50 | 52.359 | 69.16 | 472.06 MB | 631.02 MB | 1.34x |
+| LLaVA Fast | 365.93 | 11.435 | 31.28 | 216.76 MB | 284.38 MB | 1.31x |
+| LLaVA Legacy | 1271.17 | 39.724 | 67.53 | 216.76 MB | 216.77 MB | 1.00x |
+
+# W4
+
+| Model | Median ms/batch | Median ms/img | p95 - p50 | Output | Peak RSS | Peak / Output |
+|---|---:|---:|---:|---:|---:|---:|
+| Qwen Fast | 2891.88 | 361.485 | 21.27 | 1674.62 MB | 6410.22 MB | 3.83x |
+| Qwen Legacy | 7286.12 | 910.765 | 52.66 | 1674.62 MB | 3382.94 MB | 2.02x |
+| Intern Fast | 458.75 | 57.343 | 2.53 | 19.27 MB | 321.77 MB | 16.70x |
+| Intern Legacy | 908.70 | 113.588 | 7.32 | 19.27 MB | 78.17 MB | 4.06x |
+| Intern Manual | 1441.23 | 180.154 | 5.73 | 134.87 MB | 134.88 MB | 1.00x |
+| LLaVA Fast | 430.98 | 53.872 | 8.02 | 54.19 MB | 213.07 MB | 3.93x |
+| LLaVA Legacy | 1621.13 | 202.641 | 9.66 | 54.19 MB | 231.99 MB | 4.28x |
