@@ -48,7 +48,7 @@ def main():
     test_sizes = [(512, 512), (256, 768), (1024, 512), (300, 400), (800, 600)]
     for h, w in test_sizes:
         our = smart_resize_dims(h, w, min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
-        hf  = hf_smart_resize(h, w, factor=proc.patch_size,
+        hf  = hf_smart_resize(h, w, factor=proc.patch_size * proc.merge_size,
                                min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
         ok = check(f"smart_resize_dims({h},{w})", our == hf,
                    f"ours={our} HF={hf}" if our != hf else "")

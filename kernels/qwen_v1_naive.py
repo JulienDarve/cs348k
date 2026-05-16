@@ -27,7 +27,8 @@ from kernels.patch_coords import patch_linear_index, patch_output_offset
 
 PATCH_SIZE = 14
 TEMPORAL_PATCH_SIZE = 2
-FACTOR = 14             # smart_resize factor = patch_size (not merge_size * patch_size)
+MERGE_SIZE = 2
+FACTOR = PATCH_SIZE * MERGE_SIZE  # smart_resize factor = patch_size * merge_size = 28
 MIN_PIXELS = 3136       # 4 * 28 * 28  (processor default)
 MAX_PIXELS = 12845056   # 16384 * 28 * 28
 
@@ -169,7 +170,7 @@ def qwen_v1(images, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS):
         patched = patchify(normalized, PATCH_SIZE, TEMPORAL_PATCH_SIZE)
 
         outputs.append(patched)
-        grid_thw.append((TEMPORAL_PATCH_SIZE,
+        grid_thw.append((1,                    # T=1 temporal slot per still image
                           out_h // PATCH_SIZE,
                           out_w // PATCH_SIZE))
 
