@@ -28,8 +28,8 @@ Protocol:
     measure_peak_rss() around one call per variant per workload.
     Optional n_memory_warmup unmeasured calls immediately before each measurement.
   Phase 2 — TIMING (runs second):
-    W2/W3: N_WARMUP=10 warmup + N_TIMED=100 timed iterations.
-    W4:    N_WARMUP_W4=2  warmup + N_TIMED_W4=8 timed iterations.
+    W2/W3: N_WARMUP=10 warmup + N_TIMED=30 timed iterations.
+    W4:    N_WARMUP_W4=2  warmup + N_TIMED_W4=16 timed iterations.
 
 Usage:
   python bench_kernels.py
@@ -56,10 +56,10 @@ from kernels.qwen_v1_naive import qwen_v1
 from transformers.image_utils import PILImageResampling
 
 N_WARMUP = 10
-N_TIMED = 100
+N_TIMED = 30
 N_WARMUP_W4 = 2
-N_TIMED_W4 = 8
-N_MEMORY_WARMUP = 1
+N_TIMED_W4 = 16
+N_MEMORY_WARMUP = 0
 
 
 def _wrap_v1(images, proc):
