@@ -1,6 +1,7 @@
-"""Full memory baseline — Qwen2.5-VL, InternVL2.5, and LLaVA on W3 and W4.
+"""Full memory baseline — Qwen2.5-VL, InternVL2.5, and LLaVA on W2, W3 and W4.
 
 Workloads:
+  W2: 32 images, all 1024×1024 (uniform size baseline).
   W3: 32 images with random sizes and aspect ratio in [0.5, 2.0].
   W4: 8 images at 2480x3508 (A4 @ 300 dpi).
 
@@ -26,7 +27,7 @@ import argparse
 
 import torch
 
-from data import load_images_w3, load_images_w4
+from data import load_images, load_images_w3, load_images_w4
 from measurement import env_info, measure_memory
 from models import (
     load_processors,
@@ -129,13 +130,20 @@ def main():
     print("Loaded: OpenGVLab/InternVL2_5-8B (HF legacy, HF fast, manual card)")
     print(f"Loaded: {MODEL_ID_LLAVA} (legacy, fast)")
 
+    images_w2 = load_images(n_images=32, img_size=(1024, 1024))
     images_w3 = load_images_w3()
     images_w4 = load_images_w4()
 
+    print(f"\nW2 image size: {images_w2[0].size} x {len(images_w2)} images")
     sizes_w3 = [img.size for img in images_w3]
-    print(f"\nW3 sizes (first 4): {sizes_w3[:4]} ...")
+    print(f"W3 sizes (first 4): {sizes_w3[:4]} ...")
     print(f"W4 image size: {images_w4[0].size} x {len(images_w4)} images")
 
+    run_workload(
+        "W2", images_w2,
+        q_slow, q_fast, iv_hf_slow, iv_hf_fast, iv_manual, llava_slow, llava_fast,
+        n_memory_warmup=n_memory_warmup,
+    )
     run_workload(
         "W3", images_w3,
         q_slow, q_fast, iv_hf_slow, iv_hf_fast, iv_manual, llava_slow, llava_fast,
