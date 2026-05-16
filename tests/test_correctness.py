@@ -9,6 +9,8 @@ Checks:
   5. v1 pixel_values vs HF fast forced to BILINEAR (algorithm-matched);
      this is the strict correctness check — any gap is just torchvision's
      antialias filter, not an interpolation-method mismatch.
+  6. v1 pixel_values vs HF fast forced to BILINEAR + antialias=False (fully
+     algorithm-matched); any remaining gap is pure float32 accumulation order.
 
 Note on tolerance: HF fast uses BICUBIC + antialias; v1 uses bilinear (as
 specified in kernel_implementation.md). On smooth (band-limited) inputs the
@@ -23,9 +25,32 @@ Run from the repo root:
 """
 
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
+
+
+@contextmanager
+def _hf_no_antialias():
+    """Force torchvision F.resize(antialias=False) inside the with-block.
+
+    HF's Qwen2VL fast processor calls F.resize via BaseImageProcessorFast and
+    doesn't expose `antialias` as a call kwarg, so we patch the module attribute
+    that BOTH HF call sites resolve through.
+    """
+    import torchvision.transforms.v2.functional as Fmod
+    original = Fmod.resize
+
+    def _patched(*args, **kwargs):
+        kwargs["antialias"] = False
+        return original(*args, **kwargs)
+
+    Fmod.resize = _patched
+    try:
+        yield
+    finally:
+        Fmod.resize = original
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -149,6 +174,33 @@ def main():
     max_diff_bl_n = float(np.max(np.abs(pv - hf_pv_bl_n)))
     ok = check("noise: pixel_values atol=0.3", max_diff_bl_n <= 0.3,
                f"max_diff={max_diff_bl_n:.4f}")
+    all_passed = all_passed and ok
+
+    # ------------------------------------------------------------------
+    # 7. v1 vs HF fast forced to BILINEAR + antialias=False
+    #    Fully algorithm-matched: same kernel, same tap count, no filter.
+    #    Any remaining gap is purely float32 accumulation order (different
+    #    SIMD reduction in torchvision vs our njit loops, different rounding
+    #    point in HF's fused rescale_and_normalize vs our two-pass version).
+    #    Expected tight on both smooth and noise inputs (atol=0.05).
+    # ------------------------------------------------------------------
+    print("\n--- v1 vs HF fast (BILINEAR, antialias=False, fully matched) ---")
+    with _hf_no_antialias():
+        hf_out_na_s = proc(images=smooth_images, return_tensors="pt",
+                           resample=PILImageResampling.BILINEAR)
+        hf_out_na_n = proc(images=images, return_tensors="pt",
+                           resample=PILImageResampling.BILINEAR)
+    hf_pv_na_s = hf_out_na_s["pixel_values"].numpy()
+    hf_pv_na_n = hf_out_na_n["pixel_values"].numpy()
+
+    max_diff_na_s = float(np.max(np.abs(pv_s - hf_pv_na_s)))
+    ok = check("smooth: pixel_values atol=0.05", max_diff_na_s <= 0.05,
+               f"max_diff={max_diff_na_s:.4f}")
+    all_passed = all_passed and ok
+
+    max_diff_na_n = float(np.max(np.abs(pv - hf_pv_na_n)))
+    ok = check("noise: pixel_values atol=0.05", max_diff_na_n <= 0.05,
+               f"max_diff={max_diff_na_n:.4f}")
     all_passed = all_passed and ok
 
     print(f"\n{'All checks passed.' if all_passed else 'Some checks FAILED.'}")
