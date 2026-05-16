@@ -3,18 +3,22 @@
 # Note for Milestone 1
 Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
-## Activate poetry
-
-`source $(poetry env info --path)/bin/activate`
 
 ## Farmshare
-Links
 
 `https://docs.farmshare.stanford.edu/`
 
 `ssh jdarve@login.farmshare.stanford.edu`
 
 `srun -c 8 --mem=16G --pty bash`
+
+## Sample Setup
+
+`cd cs348k`
+
+`source $(poetry env info --path)/bin/activate`
+
+`git pull`
 
 ## Repository structure
 
@@ -26,14 +30,17 @@ Links
 
 - `models.py`: Loads the relevant model pre-processing code from huggingface. All huggingface model/pre-processing code fetching should be done here.
 
-- `phase[n].py`, `phase[n]_results.md`: Experiment and results from phase `n` (sanity checks, explained in the milestone)
+- `phase[n].py`: Experiment and results from phase `n` (sanity checks, explained in MILESTONE_1.md)
 
-- `full_benchmark_single_thread.py`: Runs the full benchmark results
+- `full_benchmark_single_thread.py`: Runs the full benchmark results on a single thread
 
-- `full_memory_benchmark_single_thread.py`: Runs the full memory benchmark results (there is a bug in full_benchmark_single_thread that makes its memory results invalid; this is the file that re-runs memory by itself, correctly).
+- `full_benchmark.py`: Runs the full benchmark for n threads
+
+- `full_memory_benchmark_single_thread.py`: Runs the full memory benchmark results (there is a bug in full_benchmark.py that makes its memory results invalid; this is the file that re-runs memory by itself, correctly).
 
 `visualizations/` folder: contains Jupyter notebooks for creating visualizations from the output data.
 
+`notes/` Notes about intermediate results
 
 
 ## Project Proposal
