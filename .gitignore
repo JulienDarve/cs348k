@@ -1,7 +1,9 @@
 CLAUDE.md
 AGENTS.md
-.claude
-notes/*
 
+.claude
+.vscode
+
+notes/*
 
 */__pycache__

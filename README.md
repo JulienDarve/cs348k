@@ -18,11 +18,13 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 `source $(poetry env info --path)/bin/activate`
 
+`conda activate cs348k`
+
 `git pull`
 
 ## Repository structure
 
-`benchmarks/` folder:
+`benchmarks/` folder (Milestone 1):
 
 - `data.py`: Contains `load_images` function. All iamge loading code should be here.
 
@@ -41,6 +43,20 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 `visualizations/` folder: contains Jupyter notebooks for creating visualizations from the output data.
 
 `notes/` Notes about intermediate results
+
+`kernels/` folder: Hand-fused Qwen2.5-VL preprocessor kernels (Milestone 2).
+
+- `bilinear.py`: Shared `@njit` bilinear sampling and resize primitives.
+
+- `patch_coords.py`: Shared `@njit` patch addressing utilities (flat index and column offset).
+
+- `qwen_v1_naive.py`: v1 naive correctness baseline — each stage (`smart_resize_dims`, `bilinear_resize`, `rescale`, `normalize`, `patchify`) is its own function with an intermediate buffer.
+
+`tests/` folder:
+
+- `test_libs.py` tests that libaries load
+
+- `test_correctness.py`: Verifies v1 (and future v2/v3) output shape, `image_grid_thw`, and pixel values against HF fast.
 
 
 ## Project Proposal
