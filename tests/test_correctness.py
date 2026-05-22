@@ -111,6 +111,7 @@ from benchmarks.data import load_images_w3, load_images_smooth
 from benchmarks.models import load_processors, MODEL_ID_QWEN
 from kernels.qwen_v1_naive import qwen_v1, smart_resize_dims
 from kernels.qwen_v2_fused import qwen_v2
+from kernels.qwen_v3_storage import qwen_v3
 
 
 def check(name, passed, msg=""):
@@ -126,15 +127,17 @@ def _run_kernel(version, images, proc):
         return qwen_v1(images, **kw)
     if version == "v2":
         return qwen_v2(images, **kw)
+    if version == "v3":
+        return qwen_v3(images, **kw)
     raise ValueError(f"Unknown version: {version}")
 
 
 def main():
     ap = argparse.ArgumentParser(
         description="Correctness harness for hand-fused Qwen kernel versions.")
-    ap.add_argument("--version", choices=["v1", "v2"], default="v1",
+    ap.add_argument("--version", choices=["v1", "v2", "v3"], default="v1",
                     help="Kernel version to test against HF (default: v1). "
-                         "Tests 1-7 run on this version; test 8 always cross-checks v2 vs v1.")
+                         "Tests 1-7 run on this version; tests 8-9 always cross-check all versions.")
     args = ap.parse_args()
     ver = args.version
 
@@ -307,6 +310,48 @@ def main():
     max_diff_v2_s = float(np.max(np.abs(pv2_s - pv1_s)))
     ok = check("pixel_values rtol=1e-4 (smooth)", max_diff_v2_s <= 1e-4,
                f"max_diff={max_diff_v2_s:.2e}")
+    all_passed = all_passed and ok
+
+    # ------------------------------------------------------------------
+    # 9. v3 vs v1 / v3 vs v2 — always runs regardless of --version
+    #    Full fusion eliminates the intermediate buffer but keeps the same
+    #    algorithm. Diffs vs v1 and v2 should be at the float32 accumulation-
+    #    order level only. rtol=1e-4 is the correctness gate.
+    # ------------------------------------------------------------------
+    print("\n--- v3 vs v1 / v3 vs v2 (cross-version check, always runs) ---")
+    pv3_n, grid3_n = qwen_v3(images, **kw)
+    pv3_s, grid3_s = qwen_v3(smooth_images, **kw)
+
+    ok = check("v3: output shape (noise)", pv3_n.shape == pv1_n.shape,
+               f"v3={pv3_n.shape} v1={pv1_n.shape}" if pv3_n.shape != pv1_n.shape else "")
+    all_passed = all_passed and ok
+
+    ok = check("v3: image_grid_thw (noise)", np.array_equal(grid3_n, grid1_n),
+               f"\n    v3={grid3_n}\n    v1={grid1_n}" if not np.array_equal(grid3_n, grid1_n) else "")
+    all_passed = all_passed and ok
+
+    max_diff_v3_v1_n = float(np.max(np.abs(pv3_n - pv1_n)))
+    ok = check("v3 vs v1: pixel_values rtol=1e-4 (noise)", max_diff_v3_v1_n <= 1e-4,
+               f"max_diff={max_diff_v3_v1_n:.2e}")
+    all_passed = all_passed and ok
+
+    ok = check("v3: output shape (smooth)", pv3_s.shape == pv1_s.shape,
+               f"v3={pv3_s.shape} v1={pv1_s.shape}" if pv3_s.shape != pv1_s.shape else "")
+    all_passed = all_passed and ok
+
+    max_diff_v3_v1_s = float(np.max(np.abs(pv3_s - pv1_s)))
+    ok = check("v3 vs v1: pixel_values rtol=1e-4 (smooth)", max_diff_v3_v1_s <= 1e-4,
+               f"max_diff={max_diff_v3_v1_s:.2e}")
+    all_passed = all_passed and ok
+
+    max_diff_v3_v2_n = float(np.max(np.abs(pv3_n - pv2_n)))
+    ok = check("v3 vs v2: pixel_values rtol=1e-4 (noise)", max_diff_v3_v2_n <= 1e-4,
+               f"max_diff={max_diff_v3_v2_n:.2e}")
+    all_passed = all_passed and ok
+
+    max_diff_v3_v2_s = float(np.max(np.abs(pv3_s - pv2_s)))
+    ok = check("v3 vs v2: pixel_values rtol=1e-4 (smooth)", max_diff_v3_v2_s <= 1e-4,
+               f"max_diff={max_diff_v3_v2_s:.2e}")
     all_passed = all_passed and ok
 
     print(f"\n{'All checks passed.' if all_passed else 'Some checks FAILED.'}")

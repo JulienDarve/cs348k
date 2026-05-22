@@ -80,6 +80,8 @@ Hand-fused Qwen2.5-VL preprocessor kernels (Milestone 2).
 
 - `qwen_v2_fused.py`: v2 pointwise fusion — `rescale` and `normalize` inlined into the `bilinear_resize` pixel loop (`compute_at = inline`), eliminating two intermediate buffers.
 
+- `qwen_v3_storage.py`: v3 full fusion with pre-allocated output — bilinear resize, rescale, normalize, and patchify fused into a single parallel loop that writes directly to a pre-allocated output tensor (`store_at = root`), eliminating all intermediate buffers.
+
 ### `visualizations/`
 Contains Jupyter notebooks for creating visualizations from the output data.
 

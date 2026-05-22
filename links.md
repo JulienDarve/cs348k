@@ -2,6 +2,12 @@
 
 Links and citations for model papers, code, and documentation.
 
+## Halide
+
+https://people.csail.mit.edu/jrk/halide12/halide12.pdf
+
+The original Halide paper introduces a language for image-processing pipelines that separates the algorithm from the schedule used to optimize parallelism, locality, vectorization, and recomputation. It is directly relevant to this project because the Milestone 2 kernel work is inspired by Halide-style scheduling ideas such as fusion, tiling, and moving computation closer to where values are consumed.
+
 ## Llava-NeXT AnyRes
 
 ### Original blog + paper
@@ -115,4 +121,3 @@ Model card for the Qwen2.5-VL 7B instruct checkpoint commonly used for experimen
 https://github.com/QwenLM/Qwen2.5-VL
 
 Official Qwen2.5-VL repository with inference examples, utilities, and links to released checkpoints.
-

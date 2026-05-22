@@ -1,4 +1,4 @@
-"""Kernel benchmark — Qwen2.5-VL: HF fast, HF legacy, HF fast w/ bilinear, v1, v2.
+"""Kernel benchmark — Qwen2.5-VL: HF fast, HF legacy, HF fast w/ bilinear, v1, v2, v3.
 
 Important note on memory measurement order:
   Memory benchmarks are run FIRST, before any timing loops or warmup. Timing
@@ -18,6 +18,7 @@ Processor variants (Qwen2.5-VL only):
   hf_bilinear: AutoImageProcessor(use_fast=True, resample=BILINEAR) — algorithm-matched
   v1:          kernels/qwen_v1_naive.py             — naive staged numba pipeline
   v2:          kernels/qwen_v2_fused.py             — rescale+normalize fused into resize
+  v3:          kernels/qwen_v3_storage.py           — full fusion, pre-allocated output, parallel batch
 
 Workloads:
   W2: 32 images, all 1024×1024 (uniform size baseline).
@@ -54,6 +55,7 @@ from benchmarks.measurement import time_fn, measure_memory, env_info
 from benchmarks.models import load_processors, MODEL_ID_QWEN
 from kernels.qwen_v1_naive import qwen_v1
 from kernels.qwen_v2_fused import qwen_v2
+from kernels.qwen_v3_storage import qwen_v3
 
 from transformers.image_utils import PILImageResampling
 
@@ -76,7 +78,13 @@ def _wrap_v2(images, proc):
     return {"pixel_values": pv, "image_grid_thw": grid}
 
 
-ALL_VARIANTS = ["hf_legacy", "hf_fast", "hf_bilinear", "v1", "v2"]
+def _wrap_v3(images, proc):
+    """Call v3 and return an HF-compatible dict for output_bytes/output_shape."""
+    pv, grid = qwen_v3(images, min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
+    return {"pixel_values": pv, "image_grid_thw": grid}
+
+
+ALL_VARIANTS = ["hf_legacy", "hf_fast", "hf_bilinear", "v1", "v2", "v3"]
 
 
 def make_calls(images, q_legacy, q_fast, proc_fast, variants=None):
@@ -94,6 +102,7 @@ def make_calls(images, q_legacy, q_fast, proc_fast, variants=None):
                                        resample=PILImageResampling.BILINEAR)),
         ("v1",          lambda: _wrap_v1(images, proc_fast)),
         ("v2",          lambda: _wrap_v2(images, proc_fast)),
+        ("v3",          lambda: _wrap_v3(images, proc_fast)),
     ]
     return [(name, fn) for name, fn in all_calls if name in selected]
 
@@ -215,12 +224,15 @@ def main():
     assert first_images is not None
     needs_v1 = variants is None or "v1" in variants
     needs_v2 = variants is None or "v2" in variants
-    if needs_v1 or needs_v2:
-        print("\nWarming up Numba JIT for v1/v2 (first call compiles, ~30s)...")
+    needs_v3 = variants is None or "v3" in variants
+    if needs_v1 or needs_v2 or needs_v3:
+        print("\nWarming up Numba JIT for v1/v2/v3 (first call compiles, ~30s)...")
         if needs_v1:
             _wrap_v1(first_images[:1], proc_fast)
         if needs_v2:
             _wrap_v2(first_images[:1], proc_fast)
+        if needs_v3:
+            _wrap_v3(first_images[:1], proc_fast)
         print("Numba JIT ready.")
 
     all_workloads = {
