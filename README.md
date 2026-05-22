@@ -23,6 +23,10 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 ## Repository structure
 
+### Root files
+
+- `links.md`: Collects reference links for VLM papers, project pages, Hugging Face code, and model cards.
+
 ### `benchmarks/`
 Benchmarks existing implementations (Milestone 1)
 
