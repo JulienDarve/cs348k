@@ -8,7 +8,7 @@ Workloads:
 Processor variants:
   Qwen2.5-VL:  legacy (use_fast=False) and fast (use_fast=True).
   InternVL2.5: manual model-card pipeline (dynamic tiling).
-  InternVL3.5: HF GotOcr2ImageProcessorFast with crop_to_patches=True.
+  InternVL3.5: HF legacy (use_fast=False) and fast (use_fast=True), both with crop_to_patches=True.
   LLaVA-NeXT:  legacy (use_fast=False) and fast (use_fast=True).
 
 Protocol:
@@ -19,9 +19,9 @@ Protocol:
   - Pre-decoded PIL images in RAM, no GPU.
 
 Profile outputs (one .txt per variant, grouped by workload subdirectory):
-  profiles/W2/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf,LLaVA_legacy,LLaVA_fast}.txt
-  profiles/W3/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf,LLaVA_legacy,LLaVA_fast}.txt
-  profiles/W4/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf,LLaVA_legacy,LLaVA_fast}.txt
+  profiles/W2/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
+  profiles/W3/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
+  profiles/W4/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
 
   Use --profiles-dir to keep results from different thread counts in separate directories.
 
@@ -67,7 +67,7 @@ def run(name, call, n_images, profile_path, n_warmup, n_timed):
 def run_workload(label, images, pdir,
                  q_slow, q_fast,
                  iv_manual,
-                 iv35,
+                 iv35_slow, iv35_fast,
                  llava_slow, llava_fast,
                  n_warmup, n_timed, model_filter="all"):
     n = len(images)
@@ -102,10 +102,16 @@ def run_workload(label, images, pdir,
         )
 
     if model_filter in ("all", "internvl35"):
-        results["iv35"] = run(
-            f"InternVL3.5 HF ({label})",
-            lambda: iv35(images),
-            n, wdir / "IV35_hf.txt",
+        results["iv35_slow"] = run(
+            f"InternVL3.5 HF legacy ({label})",
+            lambda: iv35_slow(images),
+            n, wdir / "IV35_hf_legacy.txt",
+            n_warmup, n_timed,
+        )
+        results["iv35_fast"] = run(
+            f"InternVL3.5 HF fast ({label})",
+            lambda: iv35_fast(images),
+            n, wdir / "IV35_hf_fast.txt",
             n_warmup, n_timed,
         )
 
@@ -125,15 +131,17 @@ def run_workload(label, images, pdir,
 
     print(f"\n=== summary {label} ===")
     if "q_slow" in results and "q_fast" in results:
-        print(f"  Qwen legacy / fast ratio:        {results['q_slow'] / results['q_fast']:.2f}x")
-    if "iv_manual" in results and "iv35" in results:
-        print(f"  IV25 manual / IV35 HF ratio:     {results['iv_manual'] / results['iv35']:.2f}x")
+        print(f"  Qwen legacy / fast ratio:          {results['q_slow'] / results['q_fast']:.2f}x")
+    if "iv35_slow" in results and "iv35_fast" in results:
+        print(f"  IV35 HF legacy / fast ratio:       {results['iv35_slow'] / results['iv35_fast']:.2f}x")
+    if "iv_manual" in results and "iv35_fast" in results:
+        print(f"  IV25 manual / IV35 HF fast ratio:  {results['iv_manual'] / results['iv35_fast']:.2f}x")
     if "q_fast" in results and "iv_manual" in results:
-        print(f"  Qwen fast / IV25 manual ratio:   {results['q_fast'] / results['iv_manual']:.2f}x")
-    if "q_fast" in results and "iv35" in results:
-        print(f"  Qwen fast / IV35 HF ratio:       {results['q_fast'] / results['iv35']:.2f}x")
+        print(f"  Qwen fast / IV25 manual ratio:     {results['q_fast'] / results['iv_manual']:.2f}x")
+    if "q_fast" in results and "iv35_fast" in results:
+        print(f"  Qwen fast / IV35 HF fast ratio:    {results['q_fast'] / results['iv35_fast']:.2f}x")
     if "llava_slow" in results and "llava_fast" in results:
-        print(f"  LLaVA legacy / fast ratio:       {results['llava_slow'] / results['llava_fast']:.2f}x")
+        print(f"  LLaVA legacy / fast ratio:         {results['llava_slow'] / results['llava_fast']:.2f}x")
 
 
 def main():
@@ -167,7 +175,7 @@ def main():
 
     model_filter = args.model
 
-    q_slow = q_fast = iv_manual = iv35 = llava_slow = llava_fast = None
+    q_slow = q_fast = iv_manual = iv35_slow = iv35_fast = llava_slow = llava_fast = None
 
     if model_filter in ("all", "qwen"):
         q_slow, q_fast = load_processors(MODEL_ID_QWEN)
@@ -178,8 +186,9 @@ def main():
         print("Loaded: OpenGVLab/InternVL2_5-8B (manual card)")
 
     if model_filter in ("all", "internvl35"):
-        iv35 = get_internvl35_hf_processor()
-        print(f"Loaded: {MODEL_ID_INTERNVL35} (HF GotOcr2ImageProcessorFast, crop_to_patches=True)")
+        iv35_slow = get_internvl35_hf_processor(use_fast=False)
+        iv35_fast = get_internvl35_hf_processor(use_fast=True)
+        print(f"Loaded: {MODEL_ID_INTERNVL35} (HF legacy, HF fast, crop_to_patches=True)")
 
     if model_filter in ("all", "llava"):
         llava_slow, llava_fast = load_processors(MODEL_ID_LLAVA)
@@ -196,17 +205,17 @@ def main():
 
     run_workload(
         "W2", images_w2, pdir,
-        q_slow, q_fast, iv_manual, iv35, llava_slow, llava_fast,
+        q_slow, q_fast, iv_manual, iv35_slow, iv35_fast, llava_slow, llava_fast,
         n_warmup=args.n_warmup, n_timed=args.n_timed, model_filter=model_filter,
     )
     run_workload(
         "W3", images_w3, pdir,
-        q_slow, q_fast, iv_manual, iv35, llava_slow, llava_fast,
+        q_slow, q_fast, iv_manual, iv35_slow, iv35_fast, llava_slow, llava_fast,
         n_warmup=args.n_warmup, n_timed=args.n_timed, model_filter=model_filter,
     )
     run_workload(
         "W4", images_w4, pdir,
-        q_slow, q_fast, iv_manual, iv35, llava_slow, llava_fast,
+        q_slow, q_fast, iv_manual, iv35_slow, iv35_fast, llava_slow, llava_fast,
         n_warmup=args.n_warmup_w4, n_timed=args.n_timed_w4, model_filter=model_filter,
     )
 

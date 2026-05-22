@@ -14,11 +14,6 @@ instead, for two reasons:
      is identical. This was verified empirically: pixel_values from both paths are
      bit-for-bit equal for all three models (max_diff=0.00e+00 on a 448×448 test
      image; see benchmarks/test_models.py).
-
-The one exception to watch: InternVL3.5's combined InternVLProcessor sets
-crop_to_patches=True as a default in InternVLProcessorKwargs._defaults, but the
-standalone preprocessor_config.json has crop_to_patches=False. We compensate by
-passing crop_to_patches=True explicitly in get_internvl35_hf_processor().
 """
 import math
 
@@ -44,11 +39,14 @@ def load_processors(model_id, **kwargs):
     return slow, fast
 
 
-def get_internvl35_hf_processor():
+def get_internvl35_hf_processor(use_fast=True):
     """Return the HF image processor for InternVL3.5-8B.
 
-    AutoImageProcessor.from_pretrained(MODEL_ID_INTERNVL35) returns
-    GotOcr2ImageProcessorFast — the same class as AutoProcessor(...).image_processor.
+    use_fast=True  → GotOcr2ImageProcessorFast  (Rust-backed, default)
+    use_fast=False → GotOcr2ImageProcessor       (pure-Python legacy)
+
+    AutoImageProcessor.from_pretrained(MODEL_ID_INTERNVL35) returns the same
+    class as AutoProcessor(...).image_processor.
 
     crop_to_patches kwarg
     ─────────────────────
@@ -63,7 +61,7 @@ def get_internvl35_hf_processor():
     Verified in test_models.py: both paths produce bit-for-bit equal pixel_values
     when the same crop_to_patches value is given to each.
     """
-    proc = AutoImageProcessor.from_pretrained(MODEL_ID_INTERNVL35)
+    proc = AutoImageProcessor.from_pretrained(MODEL_ID_INTERNVL35, use_fast=use_fast)
 
     def process_batch(images):
         return proc(images, crop_to_patches=True, return_tensors="pt")
