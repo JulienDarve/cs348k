@@ -68,8 +68,11 @@ def test_internvl35(image):
     _assert_equal(out_auto, out_full,
                   "InternVL3.5: AutoImageProcessor(crop_to_patches=True) vs AutoProcessor.image_processor(crop_to_patches=True)")
 
-    # Verify crop_to_patches=True is not a no-op — the shape or values must differ from False.
-    out_no_crop = auto_img([image], crop_to_patches=False, return_tensors="pt")
+    # Verify crop_to_patches=True is not a no-op — use a larger image so it spans multiple
+    # patches; a single 448x448 image maps to exactly one patch and the outputs are identical.
+    large_image = _make_image(width=896, height=896)
+    out_no_crop = auto_img([large_image], crop_to_patches=False, return_tensors="pt")
+    out_auto    = auto_img([large_image], crop_to_patches=True,  return_tensors="pt")
     pv_crop   = _pixel_values(out_auto)
     pv_nocrop = _pixel_values(out_no_crop)
     assert pv_crop.shape != pv_nocrop.shape or not torch.allclose(pv_crop, pv_nocrop, atol=1e-5), (
