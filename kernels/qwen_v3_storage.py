@@ -50,7 +50,7 @@ def _v3_kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, output,
     """
     # SCHEDULE: parallel(batch), grain=1
     for b in prange(len(imgs)):
-        img = imgs[b]
+        img = imgs[np.int64(b)]
         out_h = out_h_arr[b]
         out_w = out_w_arr[b]
 
