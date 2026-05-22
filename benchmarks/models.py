@@ -1,3 +1,25 @@
+"""Model loading and preprocessing for benchmarked VLMs.
+
+Design choice: AutoImageProcessor vs AutoProcessor
+──────────────────────────────────────────────────
+Each model also exposes a combined AutoProcessor (e.g. Qwen2_5_VLProcessor,
+InternVLProcessor, LlavaNextProcessor) that bundles the image processor together
+with a tokenizer. For pure image-preprocessing benchmarks we use AutoImageProcessor
+instead, for two reasons:
+
+  1. Calling the full AutoProcessor in the benchmark loop adds text-tokenization
+     overhead that is irrelevant to what we are measuring.
+  2. AutoImageProcessor.from_pretrained() returns the exact same image processor
+     class (and instance) as AutoProcessor(...).image_processor — the image math
+     is identical. This was verified empirically: pixel_values from both paths are
+     bit-for-bit equal for all three models (max_diff=0.00e+00 on a 448×448 test
+     image; see benchmarks/test_models.py).
+
+The one exception to watch: InternVL3.5's combined InternVLProcessor sets
+crop_to_patches=True as a default in InternVLProcessorKwargs._defaults, but the
+standalone preprocessor_config.json has crop_to_patches=False. We compensate by
+passing crop_to_patches=True explicitly in get_internvl35_hf_processor().
+"""
 import math
 
 import torch
@@ -23,10 +45,23 @@ def load_processors(model_id, **kwargs):
 
 
 def get_internvl35_hf_processor():
-    """Return the HF image processor for InternVL3.5-8B (GotOcr2ImageProcessorFast).
+    """Return the HF image processor for InternVL3.5-8B.
 
-    crop_to_patches=True is the default set by InternVLProcessor's kwargs but
-    is False in the standalone preprocessor_config.json, so it is passed explicitly.
+    AutoImageProcessor.from_pretrained(MODEL_ID_INTERNVL35) returns
+    GotOcr2ImageProcessorFast — the same class as AutoProcessor(...).image_processor.
+
+    crop_to_patches kwarg
+    ─────────────────────
+    The combined InternVLProcessor (AutoProcessor) sets crop_to_patches=True via
+    InternVLProcessorKwargs._defaults in processing_internvl.py. The standalone
+    preprocessor_config.json stored on the hub has crop_to_patches=False, so
+    GotOcr2ImageProcessorFast defaults to False when loaded directly.
+
+    We pass crop_to_patches=True explicitly here to match what InternVLProcessor
+    would use. This is load-bearing: on an 896×896 image it changes the output
+    from 1 patch (shape (1,3,448,448)) to 5 patches (shape (5,3,448,448)).
+    Verified in test_models.py: both paths produce bit-for-bit equal pixel_values
+    when the same crop_to_patches value is given to each.
     """
     proc = AutoImageProcessor.from_pretrained(MODEL_ID_INTERNVL35)
 
