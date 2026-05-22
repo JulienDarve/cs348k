@@ -55,7 +55,7 @@ from models import (
     MODEL_ID_LLAVA,
 )
 
-N_MEMORY_WARMUP = 1
+N_MEMORY_WARMUP = 0
 
 
 def run_workload(label, images,
