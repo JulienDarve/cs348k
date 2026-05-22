@@ -9,7 +9,7 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 `ssh jdarve@login.farmshare.stanford.edu`
 
-`srun -c 8 --mem=16G --pty bash`
+`srun -c 8 --mem=16G --time=12:00:00 --pty bash`
 
 ## Quickstart
 
@@ -20,6 +20,10 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 `conda activate cs348k`
 
 `git pull`
+
+## Dependency notes
+
+- The current lockfile uses `transformers==4.57.6` (`pyproject.toml` allows `>=4.49.0,<5.0.0`). This version supports selecting Hugging Face image processor implementations with `use_fast=False` for the legacy Python processor and `use_fast=True` for the fast processor, which is how the benchmark code compares the two preprocessing paths.
 
 ## Repository structure
 
@@ -59,6 +63,8 @@ Benchmarks existing implementations (Milestone 1)
 - `full_memory_benchmark_single_thread.py`: Runs the full memory benchmark results (there is a bug in full_benchmark.py that makes its memory results invalid; this is the file that re-runs memory by itself, correctly).
 
 - `test_llava.py`: Quick LLaVA-NeXT W3 timing, memory, and output-shape test for legacy and fast processors.
+
+- `test_models.py`: Verifies that `AutoImageProcessor` and `AutoProcessor.image_processor` return identical pixel values for each benchmarked model, and that InternVL3.5's `crop_to_patches=True` flag is load-bearing.
 
 - `test_measurement.py`: Quick Qwen2.5-VL W3 test for the timing and RSS measurement helpers.
 

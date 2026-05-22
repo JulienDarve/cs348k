@@ -1,4 +1,4 @@
-"""Full memory baseline — Qwen2.5-VL, InternVL2.5, and LLaVA on W2, W3 and W4.
+"""Full memory baseline — Qwen2.5-VL, InternVL2.5, InternVL3.5, and LLaVA on W2, W3 and W4.
 
 Important note:
   Do not use benchmarks/full_benchmark.py for memory numbers. That script is
@@ -23,7 +23,8 @@ Workloads:
 
 Processor variants:
   Qwen2.5-VL:  legacy (use_fast=False) and fast (use_fast=True).
-  InternVL2.5: HF legacy, HF fast, and manual model-card pipeline (dynamic tiling).
+  InternVL2.5: manual model-card pipeline (dynamic tiling).
+  InternVL3.5: HF GotOcr2ImageProcessorFast with crop_to_patches=True.
   LLaVA-NeXT:  legacy (use_fast=False) and fast (use_fast=True).
 
 Protocol:
@@ -33,9 +34,9 @@ Protocol:
   - Pre-decoded PIL images in RAM, no GPU.
 
 Usage:
-  python full_memory_benchmark.py
-  python full_memory_benchmark.py --num-threads N
+  python full_memory_benchmark.py [--num-threads N] [--model MODEL]
   python full_memory_benchmark.py --skip-warmup
+  MODEL choices: all (default), qwen, internvl25, internvl35, llava
 """
 import os
 
@@ -48,8 +49,9 @@ from measurement import env_info, measure_memory
 from models import (
     load_processors,
     get_internvl_manual_processor,
+    get_internvl35_hf_processor,
     MODEL_ID_QWEN,
-    MODEL_ID_INTERNVL,
+    MODEL_ID_INTERNVL35,
     MODEL_ID_LLAVA,
 )
 
@@ -58,64 +60,74 @@ N_MEMORY_WARMUP = 1
 
 def run_workload(label, images,
                  q_slow, q_fast,
-                 iv_hf_slow, iv_hf_fast, iv_manual,
+                 iv_manual,
+                 iv35,
                  llava_slow, llava_fast,
-                 n_memory_warmup):
+                 n_memory_warmup, model_filter="all"):
     n = len(images)
 
     print(f"\n{'='*60}")
     print(f"workload {label}: {n} images  (memory warmup={n_memory_warmup})")
     print(f"{'='*60}")
 
-    q_slow_ratio = measure_memory(
-        f"Qwen2.5-VL legacy ({label})",
-        lambda: q_slow(images=images, return_tensors="np"),
-        n_memory_warmup,
-    )
-    q_fast_ratio = measure_memory(
-        f"Qwen2.5-VL fast ({label})",
-        lambda: q_fast(images=images, return_tensors="pt"),
-        n_memory_warmup,
-    )
-    iv_slow_ratio = measure_memory(
-        f"InternVL2.5 HF Legacy ({label})",
-        lambda: iv_hf_slow(images=images, return_tensors="np"),
-        n_memory_warmup,
-    )
-    iv_fast_ratio = measure_memory(
-        f"InternVL2.5 HF Fast ({label})",
-        lambda: iv_hf_fast(images=images, return_tensors="pt"),
-        n_memory_warmup,
-    )
-    iv_manual_ratio = measure_memory(
-        f"InternVL2.5 Manual Card ({label})",
-        lambda: iv_manual(images),
-        n_memory_warmup,
-    )
-    llava_slow_ratio = measure_memory(
-        f"LLaVA legacy ({label})",
-        lambda: llava_slow(images=images, return_tensors="np"),
-        n_memory_warmup,
-    )
-    llava_fast_ratio = measure_memory(
-        f"LLaVA fast ({label})",
-        lambda: llava_fast(images=images, return_tensors="pt"),
-        n_memory_warmup,
-    )
+    results = {}
+
+    if model_filter in ("all", "qwen"):
+        results["q_slow"] = measure_memory(
+            f"Qwen2.5-VL legacy ({label})",
+            lambda: q_slow(images=images, return_tensors="np"),
+            n_memory_warmup,
+        )
+        results["q_fast"] = measure_memory(
+            f"Qwen2.5-VL fast ({label})",
+            lambda: q_fast(images=images, return_tensors="pt"),
+            n_memory_warmup,
+        )
+
+    if model_filter in ("all", "internvl25"):
+        results["iv_manual"] = measure_memory(
+            f"InternVL2.5 Manual Card ({label})",
+            lambda: iv_manual(images),
+            n_memory_warmup,
+        )
+
+    if model_filter in ("all", "internvl35"):
+        results["iv35"] = measure_memory(
+            f"InternVL3.5 HF ({label})",
+            lambda: iv35(images),
+            n_memory_warmup,
+        )
+
+    if model_filter in ("all", "llava"):
+        results["llava_slow"] = measure_memory(
+            f"LLaVA legacy ({label})",
+            lambda: llava_slow(images=images, return_tensors="np"),
+            n_memory_warmup,
+        )
+        results["llava_fast"] = measure_memory(
+            f"LLaVA fast ({label})",
+            lambda: llava_fast(images=images, return_tensors="pt"),
+            n_memory_warmup,
+        )
 
     print(f"\n=== memory summary {label} ===")
-    print(f"  Qwen legacy peak/output:        {q_slow_ratio:.2f}x")
-    print(f"  Qwen fast peak/output:          {q_fast_ratio:.2f}x")
-    print(f"  IV25 HF legacy peak/output:     {iv_slow_ratio:.2f}x")
-    print(f"  IV25 HF fast peak/output:       {iv_fast_ratio:.2f}x")
-    print(f"  IV25 manual peak/output:        {iv_manual_ratio:.2f}x")
-    print(f"  LLaVA legacy peak/output:       {llava_slow_ratio:.2f}x")
-    print(f"  LLaVA fast peak/output:         {llava_fast_ratio:.2f}x")
+    if "q_slow" in results:
+        print(f"  Qwen legacy peak/output:        {results['q_slow']:.2f}x")
+    if "q_fast" in results:
+        print(f"  Qwen fast peak/output:          {results['q_fast']:.2f}x")
+    if "iv_manual" in results:
+        print(f"  IV25 manual peak/output:        {results['iv_manual']:.2f}x")
+    if "iv35" in results:
+        print(f"  IV35 HF peak/output:            {results['iv35']:.2f}x")
+    if "llava_slow" in results:
+        print(f"  LLaVA legacy peak/output:       {results['llava_slow']:.2f}x")
+    if "llava_fast" in results:
+        print(f"  LLaVA fast peak/output:         {results['llava_fast']:.2f}x")
 
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Full memory baseline: Qwen, InternVL, LLaVA on W3 and W4.")
+        description="Full memory baseline: Qwen, InternVL2.5, InternVL3.5, LLaVA on W2, W3 and W4.")
     ap.add_argument("--n-memory-warmup", type=int, default=N_MEMORY_WARMUP,
                     help="Number of unmeasured warmup calls before each memory measurement.")
     ap.add_argument("--skip-warmup", action="store_true",
@@ -123,6 +135,11 @@ def main():
     ap.add_argument(
         "--num-threads", type=int, default=1, metavar="N",
         help="OMP/MKL/torch intra-op thread count (default: 1 = single-thread baseline).",
+    )
+    ap.add_argument(
+        "--model", default="all",
+        choices=["all", "qwen", "internvl25", "internvl35", "llava"],
+        help="Run only a specific model's variants (default: all).",
     )
     args = ap.parse_args()
 
@@ -137,14 +154,25 @@ def main():
 
     print(env_info())
 
-    q_slow, q_fast = load_processors(MODEL_ID_QWEN)
-    iv_hf_slow, iv_hf_fast = load_processors(MODEL_ID_INTERNVL, trust_remote_code=True)
-    iv_manual = get_internvl_manual_processor(max_num=12)
-    llava_slow, llava_fast = load_processors(MODEL_ID_LLAVA)
+    model_filter = args.model
 
-    print(f"\nLoaded: {MODEL_ID_QWEN} (legacy, fast)")
-    print("Loaded: OpenGVLab/InternVL2_5-8B (HF legacy, HF fast, manual card)")
-    print(f"Loaded: {MODEL_ID_LLAVA} (legacy, fast)")
+    q_slow = q_fast = iv_manual = iv35 = llava_slow = llava_fast = None
+
+    if model_filter in ("all", "qwen"):
+        q_slow, q_fast = load_processors(MODEL_ID_QWEN)
+        print(f"Loaded: {MODEL_ID_QWEN} (legacy, fast)")
+
+    if model_filter in ("all", "internvl25"):
+        iv_manual = get_internvl_manual_processor(max_num=12)
+        print("Loaded: OpenGVLab/InternVL2_5-8B (manual card)")
+
+    if model_filter in ("all", "internvl35"):
+        iv35 = get_internvl35_hf_processor()
+        print(f"Loaded: {MODEL_ID_INTERNVL35} (HF GotOcr2ImageProcessorFast, crop_to_patches=True)")
+
+    if model_filter in ("all", "llava"):
+        llava_slow, llava_fast = load_processors(MODEL_ID_LLAVA)
+        print(f"Loaded: {MODEL_ID_LLAVA} (legacy, fast)")
 
     images_w2 = load_images(n_images=32, img_size=(1024, 1024))
     images_w3 = load_images_w3()
@@ -157,18 +185,18 @@ def main():
 
     run_workload(
         "W2", images_w2,
-        q_slow, q_fast, iv_hf_slow, iv_hf_fast, iv_manual, llava_slow, llava_fast,
-        n_memory_warmup=n_memory_warmup,
+        q_slow, q_fast, iv_manual, iv35, llava_slow, llava_fast,
+        n_memory_warmup=n_memory_warmup, model_filter=model_filter,
     )
     run_workload(
         "W3", images_w3,
-        q_slow, q_fast, iv_hf_slow, iv_hf_fast, iv_manual, llava_slow, llava_fast,
-        n_memory_warmup=n_memory_warmup,
+        q_slow, q_fast, iv_manual, iv35, llava_slow, llava_fast,
+        n_memory_warmup=n_memory_warmup, model_filter=model_filter,
     )
     run_workload(
         "W4", images_w4,
-        q_slow, q_fast, iv_hf_slow, iv_hf_fast, iv_manual, llava_slow, llava_fast,
-        n_memory_warmup=n_memory_warmup,
+        q_slow, q_fast, iv_manual, iv35, llava_slow, llava_fast,
+        n_memory_warmup=n_memory_warmup, model_filter=model_filter,
     )
 
 

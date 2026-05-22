@@ -11,6 +11,7 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 
 MODEL_ID_QWEN = "Qwen/Qwen2.5-VL-7B-Instruct"
 MODEL_ID_INTERNVL = "OpenGVLab/InternVL2_5-8B"
+MODEL_ID_INTERNVL35 = "OpenGVLab/InternVL3-8B-hf"
 MODEL_ID_LLAVA = "llava-hf/llava-v1.6-mistral-7b-hf"
 
 
@@ -21,10 +22,18 @@ def load_processors(model_id, **kwargs):
     return slow, fast
 
 
-def get_internvl_hf_processor(use_fast=False):
-    """Return the HF AutoImageProcessor for InternVL2.5-8B."""
-    return AutoImageProcessor.from_pretrained(MODEL_ID_INTERNVL, use_fast=use_fast,
-                                              trust_remote_code=True)
+def get_internvl35_hf_processor():
+    """Return the HF image processor for InternVL3.5-8B (GotOcr2ImageProcessorFast).
+
+    crop_to_patches=True is the default set by InternVLProcessor's kwargs but
+    is False in the standalone preprocessor_config.json, so it is passed explicitly.
+    """
+    proc = AutoImageProcessor.from_pretrained(MODEL_ID_INTERNVL35)
+
+    def process_batch(images):
+        return proc(images, crop_to_patches=True, return_tensors="pt")
+
+    return process_batch
 
 
 # --- verbatim from OpenGVLab/InternVL2_5-8B model card Quickstart ---
