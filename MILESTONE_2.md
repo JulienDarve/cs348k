@@ -11,7 +11,7 @@ I also did more research into InternVL2.5. I found that the most recent version,
 
 The benchmarking harness now also supports multi-threaded execution as well as torch compile for the huggingface functions. I upgraded `benchmarks\full_benchmark.py` with these changes to evaluate profiling and runtimes, and `benchmarks\full_memory_benchmark.py` for memory. In the experiments below, I implemented `benchmarks\bench_kernels.py` to specifically benchmark my Qwen kernels against the huggingface Qwen implementations on both runtime and memory.
 
-Full runtime and memory results for all models (Qwen Legacy/Fast, InternVL2.5 Manual, InternVL3.5 Legacy/Fast, LLaVA Fast/Legacy) is shown in the appendix at the bottom of this report.
+Full runtime and memory results for all models (Qwen Legacy/Fast, InternVL2.5 Manual, InternVL3.5 Legacy/Fast, LLaVA Fast/Legacy) are shown in the appendix at the bottom of this report.
 
 # Hand-Crafted Qwen Preprocessing Numba Kernels
 
