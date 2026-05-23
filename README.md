@@ -90,6 +90,14 @@ Notes about intermediate results
 
 - `bench_kernels_results.md`: Summarizes the Milestone 2 `bench_kernels.py` kernel timing and memory results.
 
+- `bench_kernels_results_multi_thread.md`: Summarizes the Milestone 2 `bench_kernels.py --num-threads 8` timing and memory results without torch compile rows.
+
+- `temp_bench_kernel_charts.md`: Temporary markdown tables comparing Milestone 2 kernel runtimes and peak/output memory ratios across W2, W3, and W4.
+
+- `temp_torch_compile_charts.md`: Temporary markdown table comparing Qwen HF legacy and fast runtimes with and without `torch.compile`.
+
+- `temp_full_benchmark_single_thread_charts.md`: Temporary markdown tables comparing single-thread full benchmark runtimes and peak/output memory ratios across W2, W3, and W4.
+
 - `full_benchmarks_multi_thread_results.md`: Summarizes Milestone 1 timing and memory results for the multi-thread benchmark runs.
 
 - `full_benchmarks_single_thread_results.md`: Summarizes Milestone 1 timing and memory results for the single-thread benchmark runs.
