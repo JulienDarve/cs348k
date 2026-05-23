@@ -104,6 +104,70 @@ peak / output:   1.94x
       320    0.075    0.000    0.075    0.000 {method 'contiguous' of 'torch._C.TensorBase' objects}
 
 
+=== InternVL3.5 HF legacy (W2) ===
+output shape:    (320, 3, 448, 448)
+output bytes:    770.70 MB
+
+         84491 function calls (84427 primitive calls) in 4.344 seconds
+
+   Ordered by: cumulative time
+   List reduced from 114 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    4.344    4.344 /home/users/jdarve/cs348k/benchmarks/full_benchmark.py:117(<lambda>)
+        1    0.000    0.000    4.344    4.344 /home/users/jdarve/cs348k/benchmarks/models.py:66(process_batch)
+        1    0.000    0.000    4.344    4.344 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils.py:49(__call__)
+        1    0.041    0.041    4.344    4.344 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/utils/generic.py:779(wrapper)
+        1    0.007    0.007    4.303    4.303 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2.py:253(preprocess)
+      384    0.004    0.000    2.084    0.005 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2.py:205(resize)
+      384    0.008    0.000    2.076    0.005 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:323(resize)
+       32    0.001    0.000    1.713    0.054 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2.py:418(crop_image_to_patches)
+      384    0.003    0.000    1.430    0.004 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/PIL/Image.py:2328(resize)
+       64    1.375    0.021    1.375    0.021 {method 'resize' of 'ImagingCore' objects}
+      320    0.003    0.000    0.988    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils.py:88(normalize)
+      320    0.971    0.003    0.985    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:394(normalize)
+      320    0.002    0.000    0.780    0.002 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils.py:56(rescale)
+      320    0.163    0.001    0.778    0.002 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:97(rescale)
+     1058    0.507    0.000    0.745    0.001 {built-in method numpy.array}
+     1024    0.710    0.001    0.710    0.001 {method 'astype' of 'numpy.ndarray' objects}
+        1    0.000    0.000    0.365    0.365 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/feature_extraction_utils.py:77(__init__)
+        1    0.000    0.000    0.365    0.365 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/feature_extraction_utils.py:171(convert_to_tensors)
+        2    0.000    0.000    0.365    0.183 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/feature_extraction_utils.py:131(as_tensor)
+      384    0.005    0.000    0.321    0.001 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:162(to_pil_image)
+
+
+=== InternVL3.5 HF fast (W2) ===
+output shape:    (320, 3, 448, 448)
+output bytes:    770.70 MB
+
+         7716 function calls (7684 primitive calls) in 1.391 seconds
+
+   Ordered by: cumulative time
+   List reduced from 138 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    1.391    1.391 /home/users/jdarve/cs348k/benchmarks/full_benchmark.py:123(<lambda>)
+        1    0.000    0.000    1.391    1.391 /home/users/jdarve/cs348k/benchmarks/models.py:66(process_batch)
+        1    0.000    0.000    1.391    1.391 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:731(__call__)
+        1    0.000    0.000    1.391    1.391 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2_fast.py:74(preprocess)
+        1    0.000    0.000    1.391    1.391 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:734(preprocess)
+        1    0.124    0.124    1.391    1.391 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:761(_preprocess_image_like_inputs)
+        1    0.029    0.029    1.200    1.200 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2_fast.py:148(_preprocess)
+        1    0.016    0.016    0.643    0.643 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2_fast.py:78(crop_image_to_patches)
+        3    0.000    0.000    0.566    0.189 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:311(resize)
+        3    0.000    0.000    0.566    0.189 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_geometry.py:238(resize)
+        3    0.000    0.000    0.566    0.189 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_geometry.py:269(resize_image)
+        2    0.000    0.000    0.565    0.283 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torch/nn/functional.py:4614(interpolate)
+        2    0.565    0.283    0.565    0.283 {built-in method torch._C._nn._upsample_bicubic2d_aa}
+        1    0.066    0.066    0.301    0.301 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:450(rescale_and_normalize)
+        5    0.259    0.052    0.259    0.052 {built-in method torch.stack}
+        1    0.000    0.000    0.136    0.136 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:410(normalize)
+        1    0.000    0.000    0.136    0.136 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_misc.py:19(normalize)
+        1    0.000    0.000    0.136    0.136 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_misc.py:35(normalize_image)
+        1    0.113    0.113    0.113    0.113 {method 'sub' of 'torch._C.TensorBase' objects}
+        3    0.000    0.000    0.105    0.035 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:886(group_images_by_shape)
+
+
 === LLaVA fast (W2) ===
 output shape:    (32, 5, 3, 336, 336)
 output bytes:    216.76 MB
@@ -346,6 +410,70 @@ peak / output:   1.22x
       196    0.035    0.000    0.035    0.000 {method 'contiguous' of 'torch._C.TensorBase' objects}
 
 
+=== InternVL3.5 HF legacy (W3) ===
+output shape:    (196, 3, 448, 448)
+output bytes:    472.06 MB
+
+         55558 function calls (55494 primitive calls) in 2.358 seconds
+
+   Ordered by: cumulative time
+   List reduced from 114 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    2.358    2.358 /home/users/jdarve/cs348k/benchmarks/full_benchmark.py:117(<lambda>)
+        1    0.000    0.000    2.358    2.358 /home/users/jdarve/cs348k/benchmarks/models.py:66(process_batch)
+        1    0.000    0.000    2.358    2.358 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils.py:49(__call__)
+        1    0.005    0.005    2.358    2.358 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/utils/generic.py:779(wrapper)
+        1    0.004    0.004    2.352    2.352 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2.py:253(preprocess)
+      259    0.002    0.000    1.110    0.004 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2.py:205(resize)
+      259    0.005    0.000    1.105    0.004 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:323(resize)
+       32    0.001    0.000    0.882    0.028 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2.py:418(crop_image_to_patches)
+      259    0.002    0.000    0.756    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/PIL/Image.py:2328(resize)
+       63    0.722    0.011    0.722    0.011 {method 'resize' of 'ImagingCore' objects}
+      196    0.002    0.000    0.618    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils.py:88(normalize)
+      196    0.609    0.003    0.617    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:394(normalize)
+      685    0.287    0.000    0.432    0.001 {built-in method numpy.array}
+      196    0.001    0.000    0.355    0.002 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils.py:56(rescale)
+      196    0.098    0.000    0.354    0.002 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:97(rescale)
+      651    0.304    0.000    0.304    0.000 {method 'astype' of 'numpy.ndarray' objects}
+        1    0.000    0.000    0.230    0.230 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/feature_extraction_utils.py:77(__init__)
+        1    0.000    0.000    0.230    0.230 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/feature_extraction_utils.py:171(convert_to_tensors)
+        2    0.000    0.000    0.230    0.115 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/feature_extraction_utils.py:131(as_tensor)
+      259    0.003    0.000    0.166    0.001 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:162(to_pil_image)
+
+
+=== InternVL3.5 HF fast (W3) ===
+output shape:    (196, 3, 448, 448)
+output bytes:    472.06 MB
+
+         9223 function calls (9191 primitive calls) in 0.878 seconds
+
+   Ordered by: cumulative time
+   List reduced from 138 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.878    0.878 /home/users/jdarve/cs348k/benchmarks/full_benchmark.py:123(<lambda>)
+        1    0.000    0.000    0.878    0.878 /home/users/jdarve/cs348k/benchmarks/models.py:66(process_batch)
+        1    0.000    0.000    0.878    0.878 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:731(__call__)
+        1    0.000    0.000    0.878    0.878 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2_fast.py:74(preprocess)
+        1    0.000    0.000    0.878    0.878 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:734(preprocess)
+        1    0.072    0.072    0.878    0.878 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:761(_preprocess_image_like_inputs)
+        1    0.001    0.001    0.773    0.773 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2_fast.py:148(_preprocess)
+       32    0.004    0.000    0.414    0.013 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2_fast.py:78(crop_image_to_patches)
+       64    0.001    0.000    0.399    0.006 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:311(resize)
+       64    0.001    0.000    0.398    0.006 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_geometry.py:238(resize)
+       64    0.003    0.000    0.396    0.006 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_geometry.py:269(resize_image)
+       63    0.001    0.000    0.388    0.006 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torch/nn/functional.py:4614(interpolate)
+       63    0.387    0.006    0.387    0.006 {built-in method torch._C._nn._upsample_bicubic2d_aa}
+        1    0.046    0.046    0.206    0.206 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:450(rescale_and_normalize)
+       67    0.160    0.002    0.160    0.002 {built-in method torch.stack}
+        1    0.000    0.000    0.090    0.090 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:410(normalize)
+        1    0.000    0.000    0.090    0.090 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_misc.py:19(normalize)
+        1    0.000    0.000    0.090    0.090 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_misc.py:35(normalize_image)
+        1    0.075    0.075    0.075    0.075 {method 'sub' of 'torch._C.TensorBase' objects}
+        1    0.071    0.071    0.071    0.071 {method 'to' of 'torch._C.TensorBase' objects}
+
+
 === LLaVA fast (W3) ===
 output shape:    (32, 5, 3, 336, 336)
 output bytes:    216.76 MB
@@ -586,6 +714,70 @@ peak / output:   1.61x
        56    0.015    0.000    0.015    0.000 {method 'contiguous' of 'torch._C.TensorBase' objects}
         8    0.013    0.002    0.013    0.002 {built-in method torch.stack}
       560    0.011    0.000    0.011    0.000 {method 'encode' of 'ImagingEncoder' objects}
+
+
+=== InternVL3.5 HF legacy (W4) ===
+output shape:    (56, 3, 448, 448)
+output bytes:    134.87 MB
+
+         22195 function calls (22179 primitive calls) in 2.070 seconds
+
+   Ordered by: cumulative time
+   List reduced from 114 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    2.070    2.070 /home/users/jdarve/cs348k/benchmarks/full_benchmark.py:117(<lambda>)
+        1    0.000    0.000    2.070    2.070 /home/users/jdarve/cs348k/benchmarks/models.py:66(process_batch)
+        1    0.000    0.000    2.070    2.070 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils.py:49(__call__)
+        1    0.000    0.000    2.070    2.070 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/utils/generic.py:779(wrapper)
+        1    0.001    0.001    2.070    2.070 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2.py:253(preprocess)
+       72    0.001    0.000    1.635    0.023 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2.py:205(resize)
+       72    0.001    0.000    1.633    0.023 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:323(resize)
+        8    0.000    0.000    1.578    0.197 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2.py:418(crop_image_to_patches)
+       72    0.001    0.000    1.293    0.018 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/PIL/Image.py:2328(resize)
+       16    1.283    0.080    1.283    0.080 {method 'resize' of 'ImagingCore' objects}
+       72    0.001    0.000    0.294    0.004 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:162(to_pil_image)
+      194    0.116    0.001    0.250    0.001 {built-in method numpy.array}
+       72    0.002    0.000    0.201    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/PIL/Image.py:3374(fromarray)
+       72    0.000    0.000    0.199    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/PIL/Image.py:3290(frombuffer)
+       72    0.001    0.000    0.199    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/PIL/Image.py:3244(frombytes)
+       56    0.000    0.000    0.154    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils.py:88(normalize)
+       56    0.153    0.003    0.154    0.003 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_transforms.py:394(normalize)
+        8    0.000    0.000    0.146    0.018 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_utils.py:287(to_numpy_array)
+      184    0.140    0.001    0.140    0.001 {method 'astype' of 'numpy.ndarray' objects}
+       80    0.001    0.000    0.134    0.002 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/PIL/Image.py:811(__array_interface__)
+
+
+=== InternVL3.5 HF fast (W4) ===
+output shape:    (56, 3, 448, 448)
+output bytes:    134.87 MB
+
+         8313 function calls (8305 primitive calls) in 1.274 seconds
+
+   Ordered by: cumulative time
+   List reduced from 138 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    1.274    1.274 /home/users/jdarve/cs348k/benchmarks/full_benchmark.py:123(<lambda>)
+        1    0.000    0.000    1.274    1.274 /home/users/jdarve/cs348k/benchmarks/models.py:66(process_batch)
+        1    0.000    0.000    1.274    1.274 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:731(__call__)
+        1    0.000    0.000    1.274    1.274 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2_fast.py:74(preprocess)
+        1    0.000    0.000    1.274    1.274 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:734(preprocess)
+        1    0.023    0.023    1.274    1.274 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:761(_preprocess_image_like_inputs)
+        1    0.026    0.026    1.100    1.100 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2_fast.py:148(_preprocess)
+        1    0.004    0.004    0.911    0.911 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/models/got_ocr2/image_processing_got_ocr2_fast.py:78(crop_image_to_patches)
+        3    0.000    0.000    0.889    0.296 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:311(resize)
+        3    0.000    0.000    0.889    0.296 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_geometry.py:238(resize)
+        3    0.000    0.000    0.889    0.296 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/v2/functional/_geometry.py:269(resize_image)
+        2    0.000    0.000    0.888    0.444 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torch/nn/functional.py:4614(interpolate)
+        2    0.888    0.444    0.888    0.444 {built-in method torch._C._nn._upsample_bicubic2d_aa}
+        1    0.000    0.000    0.150    0.150 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:605(_prepare_image_like_inputs)
+        8    0.000    0.000    0.150    0.019 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/transformers/image_processing_utils_fast.py:567(_process_image)
+        8    0.000    0.000    0.150    0.019 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/torchvision/transforms/functional.py:181(pil_to_tensor)
+        8    0.044    0.005    0.149    0.019 {built-in method numpy.array}
+        5    0.109    0.022    0.109    0.022 {built-in method torch.stack}
+        8    0.000    0.000    0.105    0.013 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/PIL/Image.py:811(__array_interface__)
+        8    0.002    0.000    0.104    0.013 /home/users/jdarve/.cache/pypoetry/virtualenvs/cs348k-CgSSqESF-py3.12/lib/python3.12/site-packages/PIL/Image.py:849(tobytes)
 
 
 === LLaVA fast (W4) ===
