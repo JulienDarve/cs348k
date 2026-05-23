@@ -4,7 +4,7 @@ Links and citations for model papers, code, and documentation.
 
 ## Halide
 
-https://people.csail.mit.edu/jrk/halide12/halide12.pdf
+https://people.csail.mit.edu/jrk/halide-pldi13.pdf
 
 The original Halide paper introduces a language for image-processing pipelines that separates the algorithm from the schedule used to optimize parallelism, locality, vectorization, and recomputation. It is directly relevant to this project because the Milestone 2 kernel work is inspired by Halide-style scheduling ideas such as fusion, tiling, and moving computation closer to where values are consumed.
 
