@@ -7,7 +7,7 @@ For milestone 2, I hand wrote kernels for Qwen2.5-VL preprocessing. I implemente
 
 I decided to add a new workload: W2. W2 is a simple batch of 32 1024x1024 images. It is meant to be a "standard" workload that has smaller images than W4 but also uniform unlike W3. 
 
-I also did more research into InternVL2.5. I found that the most recent version, InternVL3.5, is fully supported by huggingface and includes a fast and legacy version. In the charts below, I include InternVL3.5 Legacy and InternVL3.5 Fast, and I kept InternVL2.5 Manual. The preprocessing is not significantly different between InternVL2.5 and 3.5. 
+I also did more research into InternVL2.5. I found that the most recent version, InternVL3.5, is fully supported by huggingface and includes a fast and legacy version. In the charts below, I include InternVL3.5 Legacy and InternVL3.5 Fast, and I kept InternVL2.5 Manual. The preprocessing is not significantly different between InternVL2.5 and 3.5. I included a new file `links.md` that outlines the official papers, links to github code, and huggingface model cards for each model.
 
 The benchmarking harness now also supports multi-threaded execution as well as torch compile for the huggingface functions. I upgraded `benchmarks\full_benchmark.py` with these changes to evaluate profiling and runtimes, and `benchmarks\full_memory_benchmark.py` for memory. In the experiments below, I implemented `benchmarks\bench_kernels.py` to specifically benchmark my Qwen kernels against the huggingface Qwen implementations on both runtime and memory.
 
@@ -102,14 +102,15 @@ From our multi-threading experiments, we find that we should expand parallelizat
 We also found that fragmenting the backend between PIL and pytorch caused significant performance loss for torch compile. This further justifies the need for a DSL with a unified backend to fully utilize JIT compilation.
 
 # Conclusion
+We found that implementing an optimized schedule leads to up to 3x performance improvement compared to existing implementations on a specific case study of the Qwen2.5-VL. Our experiments jusify moving forwards with a general DSL for VLM pre-processing.
 
-We find that the algorithm itself is not the bottleneck for performance. It is in fact the schedule of that algorithm; a naive implementation is up to 3x slower. Furthermore, the most important DSL scheduling choices are output preallocation / full fusion, then parallelization axis, then pointwise fusion. We found that implementing an optimized schedule leads to up to 3x performance improvement compared to the baseline.
+We find that the algorithm itself is not the bottleneck for performance. It is in fact the schedule of that algorithm; a naive implementation is up to 3x slower. Furthermore, the most important DSL scheduling choices are output preallocation / full fusion, then parallelization axis, then pointwise fusion. We will implement these key primitives into our DSL, and we can now compare the DSL performance to our fully optimized hand-written kernel.
 
 # Appendix
 
-Here we attach updated versions of the Milestone 1 charts. We now include workload W2 and InternVL3.5.
+Here we attach updated versions of the Milestone 1 charts. We now include workload W2 and InternVL3.5, and compare single versus multi-threaded.
 
-## Chart A1: Runtimes
+## Chart A1: Runtimes, Single-Threaded
 
 Median runtime in ms/img. Best model per workload is bolded.
 
@@ -119,7 +120,7 @@ Median runtime in ms/img. Best model per workload is bolded.
 | W3 | 42.037 | 53.807 | 103.369 | 75.622 | 55.974 | **25.549** | 51.560 |
 | W4 | 1458.948 | 1402.200 | 314.543 | 277.693 | 224.260 | **71.358** | 311.825 |
 
-## Chart A2: Peak Memory Allocation
+## Chart A2: Peak Memory Allocation, Single-Threaded
 
 Peak / Output RSS memory usage. Best model per workload is bolded.
 
@@ -128,3 +129,25 @@ Peak / Output RSS memory usage. Best model per workload is bolded.
 | W2 | 3.77x | 2.13x | **1.89x** | 2.03x | 2.77x | 2.53x | 3.00x |
 | W3 | 2.28x | 1.91x | 1.85x | **1.83x** | 2.73x | 2.77x | 2.65x |
 | W4 | 3.83x | 2.02x | **1.36x** | 1.55x | 4.07x | 6.10x | 5.65x |
+
+## Chart A3: Runtimes, 8 Threads
+
+Median runtime in ms/img with `--num-threads 8`. Best model per workload is bolded.
+
+| Workload | Qwen Fast | Qwen Legacy | InternVL2.5 Manual | InternVL3.5 Legacy | InternVL3.5 Fast | LLaVA Fast | LLaVA Legacy |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| W2 | 42.283 | 89.908 | 67.258 | 129.899 | 47.251 | **14.212** | 56.343 |
+| W3 | 11.565 | 36.133 | 38.658 | 71.333 | 28.296 | **10.160** | 38.120 |
+| W4 | 410.763 | 934.694 | 183.376 | 264.615 | 155.264 | **54.373** | 220.660 |
+
+## Chart A4: Peak Memory Allocation, 8 Threads
+
+Peak / Output RSS memory usage with `--num-threads 8`. Best model per workload is bolded.
+
+| Workload | Qwen Fast | Qwen Legacy | InternVL2.5 Manual | InternVL3.5 Legacy | InternVL3.5 Fast | LLaVA Fast | LLaVA Legacy |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| W2 | 3.77x | 2.13x | 1.93x | **1.89x** | 2.78x | 3.48x | 2.87x |
+| W3 | 1.53x | **1.31x** | 1.37x | 1.44x | 2.50x | 1.75x | 1.64x |
+| W4 | 3.75x | 2.02x | 1.00x | **0.00x** | 2.76x | 1.19x | 1.00x |
+
+Note: the 8-thread W4 InternVL3.5 Legacy memory result reported `0.00x`, which means we might have had an error in our memory measurement for this value.
