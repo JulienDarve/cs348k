@@ -20,15 +20,17 @@ Please go to `MILESTONE_2.md` for the write up and results for Milestone 2!
 
 `git pull`
 
-## Dependency notes
-
-The current lockfile uses `transformers==4.57.6` (`pyproject.toml` allows `>=4.49.0,<5.0.0`). This version supports selecting Hugging Face image processor implementations with `use_fast=False` for the legacy Python processor and `use_fast=True` for the fast processor, which is how the benchmark code compares the two preprocessing paths.
-
 ## Repository structure
 
 ### Root files
 
 - `links.md`: Collects reference links for VLM papers, project pages, Hugging Face code, and model cards.
+
+- `MILESTONE_1.md` Report for Milestone 1
+
+- `MILESTONE_2.md` Report for Milestone 2
+
+- `pyproject.toml` `poetry.lock` Poetry dependancy management
 
 ### `benchmarks/`
 Benchmarks existing implementations (Milestone 1)
@@ -42,7 +44,7 @@ Benchmarks existing implementations (Milestone 1)
 
 #### Infrastructure 
 
-- `data.py`: Contains `load_images` function. All iamge loading code should be here.
+- `data.py`: Contains `load_images` function. All image loading code should be here.
 
 - `measurement.py`: Timing and profiling harness using `cProfile` and `RSS`. All profiling code should be here.
 
@@ -118,3 +120,6 @@ Notes about intermediate results
 
 Historically, image pre-processing for machine learning models has been simple, with models hardcoded to a set image size, which may only need resizing and normalization. However, modern vision language model (VLM) pipelines work in the native pixel resolution of the image, and may perform more sophisticated pre-processing, such as dynamic tiling, patching, and multiple types of padding or normalization. In most open source implementations for training VLMs such as Huggingface or PyTorch Transforms, these pipelines are not implemented efficiently, and convert back and forth between several image formats such as numpy, tensors, or Pillow/PIL for different transformations. I seek to develop a DSL inspired by Halide for high-performance VLM image preprocessing, separating algorithm from schedule and providing primitives such as tiling, fusion (compute_at), parallelism, and vectorization. The key metrics I will need to verify are that existing implementations are in fact inefficient, and that the image preprocessing is a significant bottleneck in the pipeline, both of which I suspect to be the case, especially for video or high quality image processing. Precisely, I want a bar chart showing runtimes and memory usage for existing implementations showing that they are slow, and that my method is significantly faster (2-5x). Furthermore, I want a separate chart comparing the entire image processing pipeline including the VLM and show that faster pre-processing increases the overall speed significantly.
 
+## Dependency notes
+
+The current lockfile uses `transformers==4.57.6` (`pyproject.toml` allows `>=4.49.0,<5.0.0`). This version supports selecting Hugging Face image processor implementations with `use_fast=False` for the legacy Python processor and `use_fast=True` for the fast processor, which is how the benchmark code compares the two preprocessing paths.
