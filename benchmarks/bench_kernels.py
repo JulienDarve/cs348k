@@ -32,6 +32,10 @@ Protocol:
   Phase 2 — TIMING (runs second):
     W2/W3: N_WARMUP=10 warmup + N_TIMED=30 timed iterations.
     W4:    N_WARMUP_W4=2  warmup + N_TIMED_W4=16 timed iterations.
+  Optional torch.compile: use --torch-compile to wrap HF processor variants
+    (hf_legacy, hf_fast, hf_bilinear) with torch.compile(dynamic=True).
+    v1/v2/v3 are Numba kernels and are NOT affected by this flag.
+    Recommend --n-warmup >= 20; n_memory_warmup is auto-raised to 2 if 0.
 
 Usage:
   python bench_kernels.py
@@ -39,6 +43,7 @@ Usage:
   python bench_kernels.py --skip-warmup
   python bench_kernels.py --memory-only
   python bench_kernels.py --timing-only
+  python bench_kernels.py --torch-compile [--compile-mode MODE]
 """
 import gc
 import os
@@ -64,6 +69,13 @@ N_TIMED = 30
 N_WARMUP_W4 = 2
 N_TIMED_W4 = 16
 N_MEMORY_WARMUP = 0
+_COMPILE_WARMUP_MIN = 20
+_COMPILE_WARMUP_W4_MIN = 4
+_COMPILE_MEMORY_WARMUP = 2
+
+
+def _apply_compile(fn, mode):
+    return torch.compile(fn, mode=mode, dynamic=True)
 
 
 def _wrap_v1(images, proc):
@@ -187,6 +199,17 @@ def main():
                     default=None, metavar="V",
                     help="Which processor variants to benchmark (default: all). "
                          f"Choices: {ALL_VARIANTS}.")
+    ap.add_argument(
+        "--torch-compile", action="store_true",
+        help="Wrap HF processor variants (hf_legacy, hf_fast, hf_bilinear) with "
+             "torch.compile(). v1/v2/v3 Numba kernels are not affected.",
+    )
+    ap.add_argument(
+        "--compile-mode", default="default",
+        choices=["default", "reduce-overhead", "max-autotune"],
+        help="torch.compile mode (default: 'default'). "
+             "'reduce-overhead' is mainly useful on GPU; 'max-autotune' is slow to compile.",
+    )
     args = ap.parse_args()
 
     if args.timing_only and args.memory_only:
@@ -198,14 +221,36 @@ def main():
     torch.set_num_threads(n_threads)
 
     n_memory_warmup = 0 if args.skip_warmup else args.n_memory_warmup
+    if args.torch_compile and n_memory_warmup == 0:
+        n_memory_warmup = _COMPILE_MEMORY_WARMUP
+        print(
+            f"[torch.compile] Auto-set --n-memory-warmup={_COMPILE_MEMORY_WARMUP} "
+            "to allow compilation to finish before RSS measurement."
+        )
 
     print(env_info())
 
     # Load processors — use_fast=True twice: once as q_fast, once as proc_fast
     # (proc_fast is also used by _wrap_v1 to read min_pixels/max_pixels).
     q_legacy, q_fast = load_processors(MODEL_ID_QWEN)
-    proc_fast = q_fast  # alias for clarity in _wrap_v1 calls
+    proc_fast = q_fast  # keep original for attribute access (.min_pixels/.max_pixels) in v1/v2/v3
     print(f"\nLoaded: {MODEL_ID_QWEN} (legacy, fast)")
+
+    if args.torch_compile:
+        print(f"[torch.compile] mode={args.compile_mode!r}, dynamic=True  (HF variants only; v1/v2/v3 Numba kernels unaffected)")
+        if args.n_warmup < _COMPILE_WARMUP_MIN:
+            print(
+                f"[torch.compile] WARNING: --n-warmup={args.n_warmup} may be too low. "
+                f"Recommend >= {_COMPILE_WARMUP_MIN} so compilation finishes before timing."
+            )
+        if args.n_warmup_w4 < _COMPILE_WARMUP_W4_MIN:
+            print(
+                f"[torch.compile] WARNING: --n-warmup-w4={args.n_warmup_w4} may be too low. "
+                f"Recommend >= {_COMPILE_WARMUP_W4_MIN} for W4."
+            )
+        q_legacy = _apply_compile(q_legacy, args.compile_mode)
+        q_fast   = _apply_compile(q_fast,   args.compile_mode)
+        # proc_fast intentionally left as the original object so v1/v2/v3 can read its attributes.
 
     # Load only the requested workloads
     selected = set(args.workloads)
