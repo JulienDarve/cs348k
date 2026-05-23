@@ -95,12 +95,15 @@ In the fourth chart, we experimented with torch compile. Numba compiles its pyth
 
 ## DSL Insights
 
+While we found performance gains from `compute_at` in v2, runtime only improved modestly and memory usage remained high. We find that `store_at` is the dominant primitive for this pipeline, with the most significant performance gains from v2 to v3. And, v3 outperforms the baseline in runtime and with perfect 1x intermediate memory usage. 
 
+From our multi-threading experiments, we find that we should expand parallelization from per image to per pixel to get the most gain from multiple threads. I can look into a `parallel` primitive in the DSL that implements this, time permitting.
+
+We also found that framenting the backend between PIL and pytorch caused significant performance loss for torch compile. This further justifies the need for a DSL with a unified backend to fully utilized JIT compilation.
 
 # Conclusion
 
-
-
+We find that the algorithm itself is not the bottleneck for performance. It is in fact the schedule of that algorithm; a naive implementation is up to 3x slower. Furthermore, the most important DSL scheduling choices are output preallocation / full fusion, then parallelization axis, then pointwise fusion. We found that implementing an optimized schedule leads to up to 3x performance improvement compared to the baseline.
 
 # Appendix
 
