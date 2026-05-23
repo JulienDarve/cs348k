@@ -83,7 +83,15 @@ Hand-fused Qwen2.5-VL preprocessor kernels (Milestone 2).
 - `qwen_v3_storage.py`: v3 full fusion with pre-allocated output — bilinear resize, rescale, normalize, and patchify fused into a single parallel loop that writes directly to a pre-allocated output tensor (`store_at = root`), eliminating all intermediate buffers.
 
 ### `visualizations/`
-Contains Jupyter notebooks for creating visualizations from the output data.
+Contains Python scripts for creating visualizations from the output data.
+
+- `milestone_1_benchmark_charts.py`: Creates the Milestone 1 runtime and peak RSS benchmark charts.
+
+- `milestone_1_profiling_charts.py`: Creates the Milestone 1 profiling breakdown and memory movement share charts.
+
+- `milestone_2_ablation_speedups.py`: Creates a normalized Qwen kernel ablation speedup chart for Milestone 2.
+
+- `milestone_2_runtime_memory_pareto.py`: Creates a runtime versus peak/output memory Pareto chart for the Milestone 2 Qwen kernels.
 
 ### `results/` 
 Notes about intermediate results

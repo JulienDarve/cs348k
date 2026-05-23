@@ -37,6 +37,10 @@ A key note about the implementation: Qwen uses a bicubic kernel with anti-aliasi
 
 We benchmarked the runtime and peak memory allocation of the three versions of the Qwen kernel, against the huggingface implementation. We compared the legacy and fast implementation of huggingface, as well as the fast implementation with bilinear resizing. The runtime values reported are the median over 30 runs, after 10 warmup runs.
 
+The visualization below summarizes the key result. Our v3 kernel outperforms huggingface fast. In addition, v3 outperforms v2 which outperforms v1.
+
+![](visualizations\figures\milestone_2_ablation_speedups.png)
+
 ### Chart 1: Runtimes per Workload
 Median runtime in ms/img. Best model per workload is bolded.
 
@@ -85,11 +89,17 @@ Median runtime in ms/img. Best model per workload is bolded.
 
 ### Discussion
 
-The third chart shows that, with 8 threads, the fast huggingface implementation significantly outperforms its single threaded implementation. It outperforms v3 on the W3 workload, but not on the W2 or W4 workload. However, note that the v3 workload was not fully optimized for parallelism; we have parallelism over images, not output pixels. The huggingface fast implementation has more sophisticated per-pixel parallelism with tensors. This is an area for further experimentation, with a possible parallelization axis for the DSL. 
+The third chart shows that, with 8 threads, the fast huggingface implementation significantly outperforms its single threaded implementation. It outperforms v3 on the W3 workload, but not on the W2 or W4 workload. However, note that the v3 workload was not fully optimized for parallelism; we have parallelism over images, not output pixels. The huggingface fast implementation has more sophisticated per-pixel parallelism with tensors. This is an area for further experimentation, with a possible parallelization axis for the DSL. However, it is significant that our optimized scheduling in v3 is able to outperform the pytorch optimized fast version of huggingface on several workloads only with parallelism per image. 
 
-In the fourth chart, we experimented with torch compile. Numba compiles its python code in our v1-v3 implementations, so we wanted to experiment with letting torch do the same. However, performance with torch compile was significantly worse. I believe this is because, even in the huggingface fast implementation using the torchvision backend, PIL functions are interleaved with tensor operations. This means that the compilation graph is unable to compile the function end to end, and instead compiles up to the PIL operation, then after it. The PIL operations significantly hamper the performance gain from compilation.
+In the fourth chart, we experimented with torch compile. Numba compiles its python code in our v1-v3 implementations, so we wanted to experiment with letting torch do the same. However, performance with torch compile was significantly worse. I believe this is because, even in the huggingface fast implementation using the torchvision backend, PIL functions are interleaved with tensor operations. This means that the compilation graph is unable to compile the function end to end, and instead compiles up to the PIL operation, then after it. The PIL operations significantly hamper the performance gain from compilation. These results further motivate the need for an integrated DSL that uses the same stack which results in clearer computation graphs and better compilation.
+
+## DSL Insights
+
+
 
 # Conclusion
+
+
 
 
 # Appendix
