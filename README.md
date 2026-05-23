@@ -1,7 +1,6 @@
 # cs348k
 
-Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
-
+Please go to `MILESTONE_2.md` for the write up and results for Milestone 2!
 
 ## Farmshare
 
@@ -23,7 +22,7 @@ Please go to `MILESTONE_1.md` for the write up and results for Milestone 1!
 
 ## Dependency notes
 
-- The current lockfile uses `transformers==4.57.6` (`pyproject.toml` allows `>=4.49.0,<5.0.0`). This version supports selecting Hugging Face image processor implementations with `use_fast=False` for the legacy Python processor and `use_fast=True` for the fast processor, which is how the benchmark code compares the two preprocessing paths.
+The current lockfile uses `transformers==4.57.6` (`pyproject.toml` allows `>=4.49.0,<5.0.0`). This version supports selecting Hugging Face image processor implementations with `use_fast=False` for the legacy Python processor and `use_fast=True` for the fast processor, which is how the benchmark code compares the two preprocessing paths.
 
 ## Repository structure
 
@@ -100,12 +99,6 @@ Notes about intermediate results
 
 - `bench_kernels_results_multi_thread.md`: Summarizes the Milestone 2 `bench_kernels.py --num-threads 8` timing and memory results without torch compile rows.
 
-- `temp_bench_kernel_charts.md`: Temporary markdown tables comparing Milestone 2 kernel runtimes and peak/output memory ratios across W2, W3, and W4.
-
-- `temp_torch_compile_charts.md`: Temporary markdown table comparing Qwen HF legacy and fast runtimes with and without `torch.compile`.
-
-- `temp_full_benchmark_single_thread_charts.md`: Temporary markdown tables comparing single-thread full benchmark runtimes and peak/output memory ratios across W2, W3, and W4.
-
 - `full_benchmarks_multi_thread_results.md`: Summarizes Milestone 1 timing and memory results for the multi-thread benchmark runs.
 
 - `full_benchmarks_single_thread_results.md`: Summarizes Milestone 1 timing and memory results for the single-thread benchmark runs.
@@ -118,7 +111,7 @@ Notes about intermediate results
 
 - `test_libs.py` tests that libaries load
 
-- `test_correctness.py`: Verifies v1 (and future v2/v3) output shape, `image_grid_thw`, and pixel values against HF fast.
+- `test_correctness.py`: Verifies v1/v2/v3 output shape, `image_grid_thw`, and pixel values against HF fast.
 
 
 ## Project Proposal
