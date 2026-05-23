@@ -2,17 +2,30 @@
 
 For milestone 2, I hand wrote kernels for Qwen2.5-VL preprocessing. I implemented the same algorithm with three different schedules, and found significant improvements in performance based on schedule choice. From these results, we can inform the set of operations that are most important for designing a DSL. In addition, I polished some elements of the benchmarking harness with a new workload and exploring torch compile.
 
+
+# Improvements to Benchmarking Harness since Milestone 1
+
+I decided to add a new workload: W2. W2 is a simple batch of 32 1024x1024 images. It is meant to be a "standard" workload that has smaller images than W4 but also uniform unlike W3. 
+
+I also did more research into Intern2.5-VL. I found that the most recent version, Intern3.5-VL is fully supported by huggingface and includes a fast and legacy version. In the charts below, I include Intern3.5-VL Legacy and Intern3.5-VL Fast, and I kept Intern2.5-VL Manual. The perprocessing is not significantly different between Intern2.5-VL and 3.5. 
+
+The benchmarking harness now also supports mutli-threaded execution as well as torch compile for the huggingface functions. I upgraded `benchmarks\full_benchmark.py` with these changes to evaluate profiling and runtimes, and `benchmarks\full_memory_benchmark.py` for memory. In the experiments below, I implemented `benchmarks\bench_kernels.py` to specifically benchmark my Qwen kernels against the huggingface Qwen implementations on both runtime and memory.
+
+Full runtime and memory results for all models (Qwen Legacy/Fast, Intern2.5 Manual, InternVL3.5 Legacy/Fast, LLaVA Fast/Legacy) is shown in the appendix at the bottom of this report.
+
 # Hand-Crafted Qwen Preprocessing Numba Kernels
 
 ## Different Schedule, Same Algorithm
 
-I tested three seperate kernels, each implementing the Qwen2.5-VL preprocessing algorithm, but with different schedules.
+I tested three seperate kernels, each implementing the Qwen2.5-VL preprocessing algorithm, but with different schedules. The kernel implementations are in `kernels/`.
 
 The first version (v1), in `kernels/qwen_v1_naive.py` is a naive implementation of the kernel. We apply each operation in order:   bilinear_resize  →  rescale  →  normalize  →  patchify. In between each operation, we dump the entire output to a buffer in memory, to input to the next operation.
 
 The second version (v2), in `kernels/qwen_v2_fused.py` optimizes the pipeline by fusing pointwise operations. The rescale and normalize operations are pointwise, so we can perform them at the same time as we compute the bilinear resize. The new set of operations are _resize_normalize  →  patchify. The performance of the pointwise fusion explored the effects of a `compute_at` Halide-like primitive.
  
-The third version (v3), in `kernels/qwen_v3_storage.py` further optimizes with full fusion of the operations. The output memory is preallocated, and the function will fill each entry directly without intermediate buffers. Full fusion explores a possible `store_at` primitive as well as a `preallocate_output` primitive. v3 was also tested with parallelism over multiple threads.
+The third version (v3), in `kernels/qwen_v3_storage.py` further optimizes with full fusion of the operations. The output memory is preallocated, and the function will fill each entry directly without intermediate buffers. Full fusion explores a possible `store_at` primitive as well as a `preallocate_output` primitive. 
+
+v3 was also tested with numba parallelism per image and batch, and we analyze its performance with multiple threads. 
 
 ### Testing and Caveats
 
@@ -22,7 +35,7 @@ A key note about the implementation: Qwen uses a bicubic kernel with anti-aliasi
 
 ## Results
 
-We benchmarked the runtime and peak memory allocation of the three versions of the Qwen kernel, against the huggingface implementation. We compared the legacy and fast implementation of huggingface, as well as 
+We benchmarked the runtime and peak memory allocation of the three versions of the Qwen kernel, against the huggingface implementation. We compared the legacy and fast implementation of huggingface, as well as the fast implementation with bilinear resizing. The runtime values reported are the median over 30 runs, after 10 warmup runs.
 
 ### Chart 1: Runtimes per Workload
 Median runtime in ms/img. Best model per workload is bolded.
@@ -34,13 +47,21 @@ Median runtime in ms/img. Best model per workload is bolded.
 | W4 | 836.589 | 1013.734 | 1011.957 | 1212.327 | 997.460 | **334.576** |
 
 ### Chart 2: Peak Memory Allocation
-Peak / Output RSS memory usage. Best model per workload is bolded.
+Peak / Output RSS memory usageas a mulitple of output bytes. Best model per workload is bolded.
 
 | Workload | hf_legacy | hf_fast | hf_bilinear | v1 | v2 | v3 |
 |---|---:|---:|---:|---:|---:|---:|
 | W2 | 2.09x | 3.87x | 3.76x | 1.94x | 1.93x | **1.00x** |
 | W3 | 1.96x | 2.29x | 2.33x | 1.86x | 1.75x | **1.00x** |
 | W4 | 2.02x | 3.86x | 3.84x | 2.19x | 2.06x | **1.06x** |
+
+### Discussion
+
+In terms of runtime, we can see that the fully fused and memory optimized kernel v3 is able to outperform all huggingface implementations. We further observe improvement between v1 and v2 as well as v2 and v3 showing that scheduling choices like pointwise fusion and full fusion / output memory preallocation improves the performance of the program even if the underlying operations are the same.
+
+Furthermore, we found that peak memory allocation for v3 was 1x the output size, meaning that no wasteful buffers were creating during computation and memory footprint was streamlined. The memory and runtime results for v3 both show superiority over huggingface's implementations, and we can conclude that scheduling matters for program performance in both memory and runtime.
+
+## Further Experiments
 
 ### Chart 3: Multi-threaded performance
 
@@ -52,43 +73,30 @@ Median runtime in ms/img with `--num-threads 8`. Best model per workload is bold
 | W3 | 37.651 | 13.092 | **12.666** | 48.779 | 44.683 | 19.465 |
 | W4 | 948.411 | 374.803 | 372.580 | 1205.010 | 985.119 | **353.863** |
 
-Peak / Output RSS memory usage with `--num-threads 8`. Best model per workload is bolded.
-
-| Workload | hf_legacy | hf_fast | hf_bilinear | v1 | v2 | v3 |
-|---|---:|---:|---:|---:|---:|---:|
-| W2 | 2.09x | 3.87x | 3.76x | 1.95x | 1.93x | **1.00x** |
-| W3 | 1.91x | 2.27x | 2.27x | 1.89x | 1.70x | **1.00x** |
-| W4 | 2.02x | 3.84x | 3.84x | 2.19x | 2.06x | **1.08x** |
-
 ### Chart 4: Torch Compile Runtimes
 
 Median runtime in ms/img. Best model per workload is bolded.
 
-| Workload | hf_legacy | hf_legacy_compile | hf_fast | hf_fast_compile | hf_bilinear |
-|---|---:|---:|---:|---:|---:|
-| W2 | 98.685 | **86.853** | 120.409 | 277.863 | 120.357 |
-| W3 | 37.572 | 34.403 | 32.304 | 100.328 | **32.125** |
-| W4 | **836.589** | 866.885 | 1013.734 | 2141.548 | 1011.957 |
+| Workload | hf_legacy | hf_legacy_compile | hf_fast | hf_fast_compile |
+|---|---:|---:|---:|---:|
+| W2 | 98.685 | **86.853** | 120.409 | 277.863 |
+| W3 | 37.572 | 34.403 | **32.304** | 100.328 |
+| W4 | **836.589** | 866.885 | 1013.734 | 2141.548 |
+
+### Discussion
+
+The third chart shows that, with 8 threads, the fast huggingface implementation significantly outperforms its single threaded implementation. It outperforms v3 on the W3 workload, but not on the W2 or W4 workload. However, note that the v3 workload was not fully optimized for parallelism; we have parallelism over images, not output pixels. The huggingface fast implementation has more sophisticated per-pixel parallelism with tensors. This is an area for further experimentation, with a possible parallelization axis for the DSL. 
+
+In the fourth chart, we experimented with torch compile. Numba compiles its python code in our v1-v3 implementations, so we wanted to experiment with letting torch do the same. However, performance with torch compile was significantly worse. I believe this is because, even in the huggingface fast implementation using the torchvision backend, PIL functions are interleaved with tensor operations. This means that the compilation graph is unable to compile the function end to end, and instead compiles up to the PIL operation, then after it. The PIL operations significantly hamper the performance gain from compilation.
+
+# Conclusion
 
 
-## Insights for DSL
+# Appendix
 
+Here we attached the new charts from milestone 1. We now include workload 2 and InternVl-3.5.
 
-TODO:
-
-- torch compile results
-- profiling results
-- multi-thread results
-
-
-## Improvements to Benchmarking Harness since Milestone 1
-
-- Added W2 
-- Included Intern3.5-VL
-- Multi-thread results (?)
-- Torch compile
-
-#### Chart 1: Runtimes
+## Chart A1: Runtimes
 
 Median runtime in ms/img. Best model per workload is bolded.
 
@@ -98,7 +106,7 @@ Median runtime in ms/img. Best model per workload is bolded.
 | W3 | 42.037 | 53.807 | 103.369 | 75.622 | 55.974 | **25.549** | 51.560 |
 | W4 | 1458.948 | 1402.200 | 314.543 | 277.693 | 224.260 | **71.358** | 311.825 |
 
-#### Chart 2: Peak Memory Allocation
+## Chart A2: Peak Memory Allocation
 
 Peak / Output RSS memory usage. Best model per workload is bolded.
 
@@ -107,6 +115,3 @@ Peak / Output RSS memory usage. Best model per workload is bolded.
 | W2 | 3.77x | 2.13x | **1.89x** | 2.03x | 2.77x | 2.53x | 3.00x |
 | W3 | 2.28x | 1.91x | 1.85x | **1.83x** | 2.73x | 2.77x | 2.65x |
 | W4 | 3.83x | 2.02x | **1.36x** | 1.55x | 4.07x | 6.10x | 5.65x |
-
-
-## Conclusion

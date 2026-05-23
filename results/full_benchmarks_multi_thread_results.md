@@ -2,13 +2,13 @@
 
 | Model | Median ms/batch | Median ms/img | p95 - p50 | Output | Peak RSS | Peak / Output |
 |---|---:|---:|---:|---:|---:|---:|
-| Qwen Fast | 1212.78 | 37.900 | 4.21 | N/A | N/A | N/A |
-| Qwen Legacy | 2591.78 | 80.993 | 14.34 | N/A | N/A | N/A |
-| Intern2.5 Manual | 2142.65 | 66.958 | 1314.22 | N/A | N/A | N/A |
-| InternVL3.5 Legacy | N/A | N/A | N/A | N/A | N/A | N/A |
-| InternVL3.5 Fast | N/A | N/A | N/A | N/A | N/A | N/A |
-| LLaVA Fast | 664.12 | 20.754 | 47.87 | N/A | N/A | N/A |
-| LLaVA Legacy | 2738.22 | 85.569 | 137.63 | N/A | N/A | N/A |
+| Qwen Fast | 1212.78 | 37.900 | 4.21 | 824.29 MB | 3103.84 MB | 3.77x |
+| Qwen Legacy | 2591.78 | 80.993 | 14.34 | 824.29 MB | 1758.88 MB | 2.13x |
+| Intern2.5 Manual | 2142.65 | 66.958 | 1314.22 | 770.70 MB | 1489.51 MB | 1.93x |
+| InternVL3.5 Legacy | N/A | N/A | N/A | 770.70 MB | 1065.41 MB | 1.38x |
+| InternVL3.5 Fast | N/A | N/A | N/A | 770.70 MB | 2138.87 MB | 2.78x |
+| LLaVA Fast | 664.12 | 20.754 | 47.87 | 216.76 MB | 764.63 MB | 3.53x |
+| LLaVA Legacy | 2738.22 | 85.569 | 137.63 | 216.76 MB | 631.09 MB | 2.91x |
 
 # W3
 
