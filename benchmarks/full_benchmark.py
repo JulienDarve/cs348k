@@ -17,6 +17,9 @@ Protocol:
   - W4: 2 warmup + 8 timed iterations (large images; keep wall time reasonable).
   - time.perf_counter_ns(), gc disabled during timed loop.
   - Pre-decoded PIL images in RAM, no GPU.
+  - Optional torch.compile: use --torch-compile to wrap each processor with
+    torch.compile(dynamic=True). Recommend --n-warmup >= 20 so compilation
+    completes before the timed loop.
 
 Profile outputs (one .txt per variant, grouped by workload subdirectory):
   profiles/W2/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
@@ -27,6 +30,7 @@ Profile outputs (one .txt per variant, grouped by workload subdirectory):
 
 Usage:
   python full_benchmark.py [--num-threads N] [--model MODEL]
+  python full_benchmark.py --torch-compile [--compile-mode MODE]
   MODEL choices: all (default), qwen, internvl25, internvl35, llava
 """
 import os
@@ -51,6 +55,12 @@ N_WARMUP = 10
 N_TIMED = 100
 N_WARMUP_W4 = 2
 N_TIMED_W4 = 8
+_COMPILE_WARMUP_MIN = 20
+_COMPILE_WARMUP_W4_MIN = 4
+
+
+def _apply_compile(fn, mode):
+    return torch.compile(fn, mode=mode, dynamic=True)
 
 
 def run(name, call, n_images, profile_path, n_warmup, n_timed):
@@ -161,6 +171,16 @@ def main():
         choices=["all", "qwen", "internvl25", "internvl35", "llava"],
         help="Run only a specific model's variants (default: all).",
     )
+    ap.add_argument(
+        "--torch-compile", action="store_true",
+        help="Wrap each processor with torch.compile() before benchmarking.",
+    )
+    ap.add_argument(
+        "--compile-mode", default="default",
+        choices=["default", "reduce-overhead", "max-autotune"],
+        help="torch.compile mode (default: 'default'). "
+             "'reduce-overhead' is mainly useful on GPU; 'max-autotune' is slow to compile.",
+    )
     args = ap.parse_args()
 
     n_threads = args.num_threads
@@ -193,6 +213,26 @@ def main():
     if model_filter in ("all", "llava"):
         llava_slow, llava_fast = load_processors(MODEL_ID_LLAVA)
         print(f"Loaded: {MODEL_ID_LLAVA} (legacy, fast)")
+
+    if args.torch_compile:
+        print(f"\n[torch.compile] mode={args.compile_mode!r}, dynamic=True")
+        if args.n_warmup < _COMPILE_WARMUP_MIN:
+            print(
+                f"[torch.compile] WARNING: --n-warmup={args.n_warmup} may be too low. "
+                f"Recommend >= {_COMPILE_WARMUP_MIN} so compilation finishes before timing."
+            )
+        if args.n_warmup_w4 < _COMPILE_WARMUP_W4_MIN:
+            print(
+                f"[torch.compile] WARNING: --n-warmup-w4={args.n_warmup_w4} may be too low. "
+                f"Recommend >= {_COMPILE_WARMUP_W4_MIN} for W4."
+            )
+        if q_slow    is not None: q_slow    = _apply_compile(q_slow,    args.compile_mode)
+        if q_fast    is not None: q_fast    = _apply_compile(q_fast,    args.compile_mode)
+        if iv_manual is not None: iv_manual = _apply_compile(iv_manual, args.compile_mode)
+        if iv35_slow is not None: iv35_slow = _apply_compile(iv35_slow, args.compile_mode)
+        if iv35_fast is not None: iv35_fast = _apply_compile(iv35_fast, args.compile_mode)
+        if llava_slow is not None: llava_slow = _apply_compile(llava_slow, args.compile_mode)
+        if llava_fast is not None: llava_fast = _apply_compile(llava_fast, args.compile_mode)
 
     images_w2 = load_images(n_images=32, img_size=(1024, 1024))
     images_w3 = load_images_w3()
