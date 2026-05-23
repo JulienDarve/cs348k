@@ -51,6 +51,7 @@ import sys
 import argparse
 from pathlib import Path
 
+import numba
 import torch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -219,6 +220,7 @@ def main():
     os.environ["OMP_NUM_THREADS"] = str(n_threads)
     os.environ["MKL_NUM_THREADS"] = str(n_threads)
     torch.set_num_threads(n_threads)
+    numba.set_num_threads(n_threads)
 
     n_memory_warmup = 0 if args.skip_warmup else args.n_memory_warmup
     if args.torch_compile and n_memory_warmup == 0:
