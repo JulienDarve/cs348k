@@ -109,11 +109,33 @@ Notes about intermediate results
 
 - `full_profiling_output_single_thread.md`: Contains the detailed cProfile output from the single-thread profiling runs.
 
+### `dsl/`
+Core DSL: algorithm IR, schedule IR, op registry, coord registry, template factories, and Phase A codegen (Milestone 2).
+
+- `algorithm.py`: `Func` and `Pipeline` dataclasses — the algorithm DAG IR.
+
+- `schedule.py`: `StageSchedule` and `Schedule` dataclasses — per-stage `compute_at`/`store_at`/`parallel`/`write_via` annotations plus the pipeline-level `preallocate_output` flag.
+
+- `ops.py`: Op registry (`resize`, `rescale`, `normalize`, `patchify`, plus `tile`/`center_crop` stubs) and `validate(pipeline)` for op + param + input checks.
+
+- `coords.py`: Registered output-addressing coord functions for `write_via`; D1-D3 ships `qwen_patch_coords` wrapping `kernels/patch_coords.py`.
+
+- `templates.py`: Three `@njit` template factories — `make_template_naive` / `make_template_pointwise` / `make_template_full` — each closing over a coord registry entry.
+
+- `codegen.py`: `classify_fusion(pipeline, schedule)` selects the fusion level from the schedule, and `build(pipeline, schedule)` returns a `(images, **kw) → (pixel_values, image_grid_thw)` preprocessor.
+
+### `pipelines/`
+Per-model DSL pipelines (algorithm DAG + named `Schedule`s).
+
+- `qwen.py`: Qwen2.5-VL `pipeline` plus `sched_v1` / `sched_v2` / `sched_v3` — one algorithm, three schedules.
+
 ### `tests/`
 
 - `test_libs.py` tests that libaries load
 
 - `test_correctness.py`: Verifies v1/v2/v3 output shape, `image_grid_thw`, and pixel values against HF fast.
+
+- `test_dsl_correctness.py`: D3 spine gate — verifies `classify_fusion` matches v1/v2/v3, DSL-v1/v2/v3 reproduce the hand-fused Qwen kernels, DSL-v3 matches hand-v3 within 1e-7, and all three DSL schedules produce equivalent output.
 
 
 ## Project Proposal
