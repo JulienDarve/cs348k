@@ -112,6 +112,10 @@ Notes about intermediate results
 
 #### `results/aws/`
 
+- `bench_dsl_results.md`: Summarizes AWS `c7i.4xlarge` single-thread W2 timing results for Qwen HF baselines, hand-tuned kernels, and DSL kernel ablations.
+
+- `bench_dsl_results_multi_thread.md`: Summarizes AWS `c7i.4xlarge` multi-thread W2 timing results for Qwen HF baselines, hand-tuned kernels, and DSL kernel ablations.
+
 - `full_benchmarks_single_thread_results.md`: Summarizes AWS `c7i.4xlarge` single-thread full benchmark memory results from the clean memory-only benchmark run.
 
 ### `dsl/`
