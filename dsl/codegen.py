@@ -30,6 +30,9 @@ from dsl.templates import (
     make_template_naive,
     make_template_pointwise,
     make_template_full,
+    make_template_llava_naive,
+    make_template_llava_pointwise,
+    make_template_llava_full,
 )
 from kernels.qwen_v1_naive import smart_resize_dims
 
@@ -201,6 +204,152 @@ def build(pipeline: Pipeline, schedule: Schedule) -> Callable:
             for i in range(n)
         ], axis=0)
         return pv, grid_thw
+
+    preprocess.fusion = fusion
+    return preprocess
+
+
+# ---------------------------------------------------------------------------
+# LLaVA-NeXT codegen
+# ---------------------------------------------------------------------------
+
+def select_best_resolution(orig_h: int, orig_w: int, grid_pinpoints: list) -> tuple:
+    """Pick the best (best_h, best_w) from grid_pinpoints for this image.
+
+    grid_pinpoints: list of [height, width] pairs (HF convention — pairs are
+    iterated as `for height, width in possible_resolutions` in HF source).
+
+    Selection matches HF LlavaNextImageProcessor.select_best_resolution:
+      primary criterion: maximize effective area (min of downscaled area and
+      original area); secondary: minimize wasted area. Returns (best_h, best_w).
+    """
+    best = None
+    max_effective = 0
+    min_wasted = float("inf")
+    for ph, pw in grid_pinpoints:          # ph = height, pw = width
+        scale = min(pw / orig_w, ph / orig_h)
+        ds_w = int(orig_w * scale)
+        ds_h = int(orig_h * scale)
+        effective = min(ds_w * ds_h, orig_w * orig_h)
+        wasted = ph * pw - effective
+        if effective > max_effective or (effective == max_effective and wasted < min_wasted):
+            max_effective = effective
+            min_wasted = wasted
+            best = (int(ph), int(pw))
+    return best  # (best_h, best_w)
+
+
+def classify_fusion_llava(pipeline: Pipeline, schedule: Schedule) -> str:
+    """Pick the fusion level for a LLaVA pipeline from its schedule.
+
+    Identical logic to classify_fusion but applied to the LLaVA DAG (output
+    stage is 'normalize', which uses write_via='llava_chw' for full fusion).
+
+    "full"      ↔ schedule.preallocate_output AND output stage has write_via set.
+    "pointwise" ↔ all rescale/normalize stages have compute_at="inline".
+    "naive"     ↔ otherwise.
+    """
+    output_stage = schedule.of(pipeline.output)
+    if schedule.preallocate_output and output_stage.write_via is not None:
+        return "full"
+
+    pointwise_ops = {"rescale", "normalize"}
+    pointwise_funcs = [f for f in pipeline.funcs if f.op in pointwise_ops]
+    if pointwise_funcs and all(
+        schedule.of(f.name).compute_at == "inline" for f in pointwise_funcs
+    ):
+        return "pointwise"
+
+    return "naive"
+
+
+def _gather_tile_params(pipeline: Pipeline):
+    """Return (tile_size, grid_pinpoints) from the pipeline's tile Func."""
+    tile_fs = pipeline.by_op("tile")
+    if not tile_fs:
+        raise ValueError("LLaVA pipeline missing required 'tile' op")
+    p = tile_fs[0].params
+    return int(p["tile_size"]), p["image_grid_pinpoints"]
+
+
+def build_llava(pipeline: Pipeline, schedule: Schedule) -> Callable:
+    """Compile a LLaVA Pipeline+Schedule to a callable preprocessor.
+
+    Returned callable signature:
+      (images: list[PIL.Image]) → (pixel_values: np.ndarray,
+                                   n_tiles_per_image: np.ndarray)
+
+    pixel_values shape: (N_total_tiles, 3, tile_size, tile_size) float32, CHW.
+    n_tiles_per_image shape: (B,) int64. Sum equals N_total_tiles.
+
+    Tile ordering: thumbnail first (index 0 per image), then grid tiles in
+    row-major order — matches HF LlavaNextImageProcessor.
+    """
+    ops_mod.validate(pipeline)
+
+    fusion = classify_fusion_llava(pipeline, schedule)
+    mean, std, scale = _gather_pointwise(pipeline)
+    tile_size, grid_pinpoints = _gather_tile_params(pipeline)
+
+    parallel = schedule.parallel_axis() == "batch"
+
+    if fusion == "naive":
+        template = make_template_llava_naive()
+    elif fusion == "pointwise":
+        template = make_template_llava_pointwise()
+    elif fusion == "full":
+        template = make_template_llava_full(parallel_tiles=parallel)
+    else:
+        raise ValueError(f"unhandled fusion level {fusion!r}")
+
+    def preprocess(images):
+        n = len(images)
+        if n == 0:
+            return (np.empty((0, 3, tile_size, tile_size), dtype=np.float32),
+                    np.empty((0,), dtype=np.int64))
+
+        arrs = [np.asarray(img, dtype=np.uint8) for img in images]
+
+        # Select best resolution per image (pure Python, cheap)
+        tile_infos = []
+        for arr in arrs:
+            orig_h, orig_w = arr.shape[:2]
+            tile_infos.append(select_best_resolution(orig_h, orig_w, grid_pinpoints))
+
+        if fusion == "full":
+            # Build flat tile descriptor arrays for the v3 kernel
+            tile_descs_list = []
+            img_idx_list = []
+            n_tiles_per_image = []
+            for b, (arr, (best_h, best_w)) in enumerate(zip(arrs, tile_infos)):
+                orig_h, orig_w = arr.shape[:2]
+                n_rows = best_h // tile_size
+                n_cols = best_w // tile_size
+                # Thumbnail: sentinel t_row = t_col = -1
+                tile_descs_list.append([orig_h, orig_w, tile_size, tile_size, -1, -1])
+                img_idx_list.append(b)
+                # Grid tiles in row-major order
+                for r in range(n_rows):
+                    for c in range(n_cols):
+                        tile_descs_list.append([orig_h, orig_w, best_h, best_w, r, c])
+                        img_idx_list.append(b)
+                n_tiles_per_image.append(1 + n_rows * n_cols)
+
+            tile_descs = np.array(tile_descs_list, dtype=np.int64)
+            img_idx    = np.array(img_idx_list,    dtype=np.int64)
+            n_total    = len(img_idx_list)
+            output     = np.empty((n_total, 3, tile_size, tile_size), dtype=np.float32)
+
+            typed_imgs = numba.typed.List(arrs)
+            template(typed_imgs, tile_descs, img_idx, output,
+                     mean, std, np.float32(scale), tile_size)
+            pv = output
+            n_tiles_arr = np.array(n_tiles_per_image, dtype=np.int64)
+        else:
+            # naive / pointwise: template returns (pv, n_tiles_per_image)
+            pv, n_tiles_arr = template(arrs, tile_infos, mean, std, scale, tile_size)
+
+        return pv, n_tiles_arr
 
     preprocess.fusion = fusion
     return preprocess

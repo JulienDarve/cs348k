@@ -51,11 +51,13 @@ OPS: dict[str, OpSpec] = {
         n_inputs=1,
     ),
 
-    # tile / center_crop: stubs for D4-D5 (LLaVA, InternVL).
+    # tile: source op (like resize) for AnyRes tiling (LLaVA, InternVL).
+    # tile_policy names the resolution-selection policy ("llava_anyres", etc.).
+    # image_grid_pinpoints is a list of [h, w] candidate resolutions.
     "tile": OpSpec(
         name="tile",
-        required_params=(),
-        n_inputs=1,
+        required_params=("tile_policy", "tile_size", "image_grid_pinpoints"),
+        n_inputs=0,   # source op — reads raw image, not an upstream Func
     ),
     "center_crop": OpSpec(
         name="center_crop",

@@ -38,6 +38,7 @@ Benchmarks existing implementations (Milestone 1)
 #### Core files
 - `bench_kernels.py`: Benchmarks the Milestone 2 Qwen kernel implementations against HF legacy, HF fast, and HF bilinear baselines.
 - `bench_dsl.py`: Extends bench_kernels.py with DSL-compiled variants (dsl_v1/v2/v3) built via dsl/codegen.py to benchmark the DSL ablation alongside hand-written kernels and HF baselines.
+- `bench_dsl_llava.py`: Benchmarks LLaVA-NeXT DSL variants (dsl_v1/v2/v3) against HF legacy/fast on W2/W3/W4 workloads; no hand-tuned kernels.
 
 - `full_benchmark.py`: Runs the full benchmark for n threads
 
@@ -127,18 +128,20 @@ Core DSL: algorithm IR, schedule IR, op registry, coord registry, template facto
 
 - `schedule.py`: `StageSchedule` and `Schedule` dataclasses — per-stage `compute_at`/`store_at`/`parallel`/`write_via` annotations plus the pipeline-level `preallocate_output` flag.
 
-- `ops.py`: Op registry (`resize`, `rescale`, `normalize`, `patchify`, plus `tile`/`center_crop` stubs) and `validate(pipeline)` for op + param + input checks.
+- `ops.py`: Op registry (`resize`, `rescale`, `normalize`, `patchify`, `tile`, `center_crop`) and `validate(pipeline)` for op + param + input checks.
 
-- `coords.py`: Registered output-addressing coord functions for `write_via`; D1-D3 ships `qwen_patch_coords` wrapping `kernels/patch_coords.py`.
+- `coords.py`: Registered output-addressing coord functions for `write_via`; Qwen ships `qwen_patch_coords` wrapping `kernels/patch_coords.py`.
 
-- `templates.py`: Three `@njit` template factories — `make_template_naive` / `make_template_pointwise` / `make_template_full` — each closing over a coord registry entry.
+- `templates.py`: Qwen `@njit` template factories (`make_template_naive/pointwise/full`) plus LLaVA factories (`make_template_llava_naive/pointwise/full`) and the shared `_enumerate_tiles` helper.
 
-- `codegen.py`: `classify_fusion(pipeline, schedule)` selects the fusion level from the schedule, and `build(pipeline, schedule)` returns a `(images, **kw) → (pixel_values, image_grid_thw)` preprocessor.
+- `codegen.py`: Qwen codegen (`classify_fusion`, `build`) and LLaVA codegen (`classify_fusion_llava`, `build_llava`, `select_best_resolution`).
 
 ### `pipelines/`
 Per-model DSL pipelines (algorithm DAG + named `Schedule`s).
 
 - `qwen.py`: Qwen2.5-VL `pipeline` plus `sched_v1` / `sched_v2` / `sched_v3` — one algorithm, three schedules.
+
+- `llava.py`: LLaVA-NeXT `pipeline` (tile → rescale → normalize) plus `sched_v1` / `sched_v2` / `sched_v3`; output is `(N_total_tiles, 3, 336, 336)` CHW.
 
 ### `tests/`
 
@@ -147,6 +150,8 @@ Per-model DSL pipelines (algorithm DAG + named `Schedule`s).
 - `test_correctness.py`: Verifies v1/v2/v3 output shape, `image_grid_thw`, and pixel values against HF fast.
 
 - `test_dsl_correctness.py`: D3 spine gate — verifies `classify_fusion` matches v1/v2/v3, DSL-v1/v2/v3 reproduce the hand-fused Qwen kernels, DSL-v3 matches hand-v3 within 1e-7, and all three DSL schedules produce equivalent output.
+
+- `test_dsl_llava_correctness.py`: D4 gate — verifies `classify_fusion_llava`, DSL LLaVA output shape, cross-schedule consistency, and pixel values vs HF bilinear within atol=0.05.
 
 
 ## Project Proposal
