@@ -2,7 +2,7 @@
 
 Source: `benchmarks/full_memory_benchmark.py --num-threads 1` on AWS `c7i.4xlarge`.
 
-Timing columns are from `benchmarks/full_benchmark.py` where available. W4 timing remains `N/A` because the captured timing output stops after W3.
+Timing columns are from `benchmarks/full_benchmark.py`; memory columns are from `benchmarks/full_memory_benchmark.py --num-threads 1`.
 
 # W2
 
@@ -32,10 +32,10 @@ Timing columns are from `benchmarks/full_benchmark.py` where available. W4 timin
 
 | Model | Median ms/batch | Median ms/img | p95 - p50 | Output | Peak RSS | Peak / Output |
 |---|---:|---:|---:|---:|---:|---:|
-| Qwen Fast | N/A | N/A | N/A | 1674.62 MB | 6436.32 MB | **3.84x** |
-| Qwen Legacy | N/A | N/A | N/A | 1674.62 MB | 3383.13 MB | **2.02x** |
-| Intern2.5 Manual | N/A | N/A | N/A | 134.87 MB | 168.47 MB | **1.25x** |
-| InternVL3.5 Legacy | N/A | N/A | N/A | 134.87 MB | 148.98 MB | **1.10x** |
-| InternVL3.5 Fast | N/A | N/A | N/A | 134.87 MB | 530.19 MB | **3.93x** |
-| LLaVA Fast | N/A | N/A | N/A | 54.19 MB | 271.63 MB | **5.01x** |
-| LLaVA Legacy | N/A | N/A | N/A | 54.19 MB | 229.88 MB | **4.24x** |
+| Qwen Fast | 4654.80 ms | 581.849 ms | 10.50 ms | 1674.62 MB | 6436.32 MB | **3.84x** |
+| Qwen Legacy | 5650.86 ms | 706.358 ms | 166.78 ms | 1674.62 MB | 3383.13 MB | **2.02x** |
+| Intern2.5 Manual | 1008.82 ms | 126.102 ms | 8.35 ms | 134.87 MB | 168.47 MB | **1.25x** |
+| InternVL3.5 Legacy | 1368.43 ms | 171.054 ms | 2.31 ms | 134.87 MB | 148.98 MB | **1.10x** |
+| InternVL3.5 Fast | 952.82 ms | 119.103 ms | 18.56 ms | 134.87 MB | 530.19 MB | **3.93x** |
+| LLaVA Fast | 282.42 ms | 35.303 ms | 3.58 ms | 54.19 MB | 271.63 MB | **5.01x** |
+| LLaVA Legacy | 1170.41 ms | 146.301 ms | 4.78 ms | 54.19 MB | 229.88 MB | **4.24x** |

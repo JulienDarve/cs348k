@@ -21,12 +21,13 @@ Protocol:
     torch.compile(dynamic=True). Recommend --n-warmup >= 20 so compilation
     completes before the timed loop.
 
-Profile outputs (one .txt per variant, grouped by workload subdirectory):
-  profiles/W2/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
-  profiles/W3/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
-  profiles/W4/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
+Profile outputs (one .txt per variant, grouped by thread count and workload):
+  profiles/threads_N/W2/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
+  profiles/threads_N/W3/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
+  profiles/threads_N/W4/{Q25_legacy,Q25_fast,IV25_manual,IV35_hf_legacy,IV35_hf_fast,LLaVA_legacy,LLaVA_fast}.txt
 
-  Use --profiles-dir to keep results from different thread counts in separate directories.
+  By default, --num-threads N writes under profiles/threads_N. Pass
+  --profiles-dir to override the full output directory.
 
 Usage:
   python full_benchmark.py [--num-threads N] [--model MODEL]
@@ -58,6 +59,10 @@ N_WARMUP_W4 = 2
 N_TIMED_W4 = 16
 _COMPILE_WARMUP_MIN = 20
 _COMPILE_WARMUP_W4_MIN = 4
+
+
+def default_profiles_dir(n_threads):
+    return Path("profiles") / f"threads_{n_threads}"
 
 
 def _apply_compile(fn, mode):
@@ -158,7 +163,11 @@ def run_workload(label, images, pdir,
 def main():
     ap = argparse.ArgumentParser(
         description="Full benchmark baseline: Qwen, InternVL2.5, InternVL3.5, LLaVA on W2, W3 and W4.")
-    ap.add_argument("--profiles-dir", default="profiles")
+    ap.add_argument(
+        "--profiles-dir",
+        default=None,
+        help="Profile output directory. Default: profiles/threads_N, where N is --num-threads.",
+    )
     ap.add_argument("--n-warmup", type=int, default=N_WARMUP)
     ap.add_argument("--n-timed", type=int, default=N_TIMED)
     ap.add_argument("--n-warmup-w4", type=int, default=N_WARMUP_W4)
@@ -194,8 +203,9 @@ def main():
 
     print(env_info())
 
-    pdir = Path(args.profiles_dir)
-    pdir.mkdir(exist_ok=True)
+    pdir = Path(args.profiles_dir) if args.profiles_dir else default_profiles_dir(n_threads)
+    pdir.mkdir(parents=True, exist_ok=True)
+    print(f"profile_dir={pdir}")
 
     model_filter = args.model
 
