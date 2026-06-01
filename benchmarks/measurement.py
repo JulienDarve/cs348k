@@ -19,7 +19,7 @@ def _current_rss_bytes():
         return int(f.read().split()[1]) * _PAGE
 
 
-def measure_peak_rss(fn, sample_hz=2000):
+def measure_peak_rss(fn, sample_hz=4000):
     """Run fn while sampling RSS in a background thread.
 
     Returns (result, peak_delta_bytes). peak_delta is peak RSS observed
