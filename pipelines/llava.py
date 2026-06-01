@@ -28,8 +28,8 @@ from dsl.schedule import Schedule, StageSchedule
 # Constants — llava-hf/llava-v1.6-mistral-7b-hf
 # ---------------------------------------------------------------------------
 
-LLAVA_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-LLAVA_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+LLAVA_MEAN = np.array([0.48145467042922974, 0.45782750844955444, 0.40821072459220886], dtype=np.float32)
+LLAVA_STD  = np.array([0.2686295509338379,  0.2613025903701782,  0.27577710151672363], dtype=np.float32)
 LLAVA_SCALE = 1.0 / 255.0
 TILE_SIZE = 336
 
