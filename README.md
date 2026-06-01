@@ -109,6 +109,10 @@ Notes about intermediate results
 
 - `full_profiling_output_single_thread.md`: Contains the detailed cProfile output from the single-thread profiling runs.
 
+#### `results/aws/`
+
+- `full_benchmarks_single_thread_results.md`: Summarizes AWS `c7i.4xlarge` single-thread full benchmark memory results from the clean memory-only benchmark run.
+
 ### `dsl/`
 Core DSL: algorithm IR, schedule IR, op registry, coord registry, template factories, and Phase A codegen (Milestone 2).
 
