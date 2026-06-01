@@ -37,6 +37,7 @@ Benchmarks existing implementations (Milestone 1)
 
 #### Core files
 - `bench_kernels.py`: Benchmarks the Milestone 2 Qwen kernel implementations against HF legacy, HF fast, and HF bilinear baselines.
+- `bench_dsl.py`: Extends bench_kernels.py with DSL-compiled variants (dsl_v1/v2/v3) built via dsl/codegen.py to benchmark the DSL ablation alongside hand-written kernels and HF baselines.
 
 - `full_benchmark.py`: Runs the full benchmark for n threads
 
