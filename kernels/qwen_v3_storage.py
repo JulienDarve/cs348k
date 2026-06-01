@@ -49,8 +49,9 @@ def _v3_kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, output,
               intermediate image buffer is allocated.
     """
     # SCHEDULE: parallel(batch), grain=1
-    for b in prange(len(imgs)):
-        img = imgs[int(b)]
+    n = np.int64(len(imgs))
+    for b in prange(n):
+        img = imgs[b]
         out_h = out_h_arr[b]
         out_w = out_w_arr[b]
 

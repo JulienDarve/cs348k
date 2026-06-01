@@ -193,8 +193,9 @@ def make_template_full(coord, parallel_batch: bool):
         @njit(parallel=True, cache=True)
         def kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, scale,
                    output, patch_size, temporal_patch_size, merge_size):
-            for b in prange(len(imgs)):
-                img = imgs[int(b)]
+            n = np.int64(len(imgs))
+            for b in prange(n):
+                img = imgs[b]
                 h = img.shape[0]
                 w = img.shape[1]
                 c = img.shape[2]
@@ -226,8 +227,9 @@ def make_template_full(coord, parallel_batch: bool):
         @njit(cache=True)
         def kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, scale,
                    output, patch_size, temporal_patch_size, merge_size):
-            for b in range(len(imgs)):
-                img = imgs[int(b)]
+            n = np.int64(len(imgs))
+            for b in range(n):
+                img = imgs[b]
                 h = img.shape[0]
                 w = img.shape[1]
                 c = img.shape[2]
