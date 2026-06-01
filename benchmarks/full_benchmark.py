@@ -31,6 +31,7 @@ Profile outputs (one .txt per variant, grouped by workload subdirectory):
 Usage:
   python full_benchmark.py [--num-threads N] [--model MODEL]
   python full_benchmark.py --torch-compile [--compile-mode MODE]
+  python full_benchmark.py --workloads W2 W3
   MODEL choices: all (default), qwen, internvl25, internvl35, llava
 """
 import os
@@ -171,6 +172,9 @@ def main():
         choices=["all", "qwen", "internvl25", "internvl35", "llava"],
         help="Run only a specific model's variants (default: all).",
     )
+    ap.add_argument("--workloads", nargs="+", choices=["W2", "W3", "W4"],
+                    default=["W2", "W3", "W4"], metavar="W",
+                    help="Which workloads to run (default: W2 W3 W4).")
     ap.add_argument(
         "--torch-compile", action="store_true",
         help="Wrap each processor with torch.compile() before benchmarking.",
@@ -234,30 +238,29 @@ def main():
         if llava_slow is not None: llava_slow = _apply_compile(llava_slow, args.compile_mode)
         if llava_fast is not None: llava_fast = _apply_compile(llava_fast, args.compile_mode)
 
-    images_w2 = load_images(n_images=32, img_size=(1024, 1024))
-    images_w3 = load_images_w3()
-    images_w4 = load_images_w4()
+    selected = set(args.workloads)
+    images_w2 = load_images(n_images=32, img_size=(1024, 1024)) if "W2" in selected else None
+    images_w3 = load_images_w3()                                 if "W3" in selected else None
+    images_w4 = load_images_w4()                                 if "W4" in selected else None
 
-    print(f"\nW2 image size: {images_w2[0].size} x {len(images_w2)} images")
-    sizes_w3 = [img.size for img in images_w3]
-    print(f"W3 sizes (first 4): {sizes_w3[:4]} ...")
-    print(f"W4 image size: {images_w4[0].size} x {len(images_w4)} images")
+    if images_w2: print(f"\nW2 image size: {images_w2[0].size} x {len(images_w2)} images")
+    if images_w3:
+        sizes_w3 = [img.size for img in images_w3]
+        print(f"W3 sizes (first 4): {sizes_w3[:4]} ...")
+    if images_w4: print(f"W4 image size: {images_w4[0].size} x {len(images_w4)} images")
 
-    run_workload(
-        "W2", images_w2, pdir,
-        q_slow, q_fast, iv_manual, iv35_slow, iv35_fast, llava_slow, llava_fast,
-        n_warmup=args.n_warmup, n_timed=args.n_timed, model_filter=model_filter,
-    )
-    run_workload(
-        "W3", images_w3, pdir,
-        q_slow, q_fast, iv_manual, iv35_slow, iv35_fast, llava_slow, llava_fast,
-        n_warmup=args.n_warmup, n_timed=args.n_timed, model_filter=model_filter,
-    )
-    run_workload(
-        "W4", images_w4, pdir,
-        q_slow, q_fast, iv_manual, iv35_slow, iv35_fast, llava_slow, llava_fast,
-        n_warmup=args.n_warmup_w4, n_timed=args.n_timed_w4, model_filter=model_filter,
-    )
+    all_workloads = {
+        "W2": (images_w2, args.n_warmup,    args.n_timed),
+        "W3": (images_w3, args.n_warmup,    args.n_timed),
+        "W4": (images_w4, args.n_warmup_w4, args.n_timed_w4),
+    }
+    for label in args.workloads:
+        images, n_warmup, n_timed = all_workloads[label]
+        run_workload(
+            label, images, pdir,
+            q_slow, q_fast, iv_manual, iv35_slow, iv35_fast, llava_slow, llava_fast,
+            n_warmup=n_warmup, n_timed=n_timed, model_filter=model_filter,
+        )
 
 
 if __name__ == "__main__":
