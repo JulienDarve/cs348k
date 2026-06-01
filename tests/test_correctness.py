@@ -138,10 +138,15 @@ def main():
     ap.add_argument("--version", choices=["v1", "v2", "v3"], default="v1",
                     help="Kernel version to test against HF (default: v1). "
                          "Tests 1-7 run on this version; tests 8-9 always cross-check all versions.")
+    ap.add_argument("--num-threads", type=int, default=1,
+                    help="Number of Numba threads for parallel kernels (default: 1).")
     args = ap.parse_args()
     ver = args.version
 
-    print(f"Testing version: {ver}")
+    import numba
+    numba.set_num_threads(args.num_threads)
+
+    print(f"Testing version: {ver} (num_threads={args.num_threads})")
     print("Loading images and HF fast processor...")
     images = load_images_w3(n_images=4, seed=0)
     _, proc = load_processors(MODEL_ID_QWEN)

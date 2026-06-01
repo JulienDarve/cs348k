@@ -25,6 +25,7 @@ The "all schedules produce equal output" property (5) is the load-bearing
 claim: changing the schedule must not change the algorithm's output.
 """
 
+import argparse
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -68,7 +69,16 @@ def check(name, passed, msg=""):
 
 
 def main():
-    print("Loading images and HF fast processor...")
+    ap = argparse.ArgumentParser(
+        description="Correctness harness for the DSL Qwen pipeline (D3 gate).")
+    ap.add_argument("--num-threads", type=int, default=1,
+                    help="Number of Numba threads for parallel kernels (default: 1).")
+    args = ap.parse_args()
+
+    import numba
+    numba.set_num_threads(args.num_threads)
+
+    print(f"Loading images and HF fast processor... (num_threads={args.num_threads})")
     noise = load_images_w3(n_images=4, seed=0)
     smooth = load_images_smooth(n_images=4, seed=0)
     _, proc = load_processors(MODEL_ID_QWEN)

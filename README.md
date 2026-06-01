@@ -24,7 +24,7 @@ Please go to `MILESTONE_2.md` for the write up and results for Milestone 2!
 
 ### Root files
 
-- `links.md`: Collects reference links for VLM papers, project pages, Hugging Face code, and model cards.
+- `LINKS.md`: Collects reference links for VLM papers, project pages, Hugging Face code, and model cards.
 
 - `MILESTONE_1.md` Report for Milestone 1
 
