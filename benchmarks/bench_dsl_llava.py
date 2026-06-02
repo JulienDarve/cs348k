@@ -1,4 +1,4 @@
-"""DSL benchmark — LLaVA-NeXT: HF fast, HF legacy, dsl_v1, dsl_v2, dsl_v3.
+"""DSL benchmark — LLaVA-NeXT: HF fast, HF legacy, HF fast w/ bilinear, dsl_v1, dsl_v2, dsl_v3.
 
 Mirrors bench_dsl.py in protocol, flags, and output format, but targets
 the LLaVA-NeXT pipeline (llava-hf/llava-v1.6-mistral-7b-hf) with AnyRes
@@ -7,6 +7,7 @@ tiling. No hand-tuned kernels exist for LLaVA.
 Processor variants:
   hf_legacy:  AutoImageProcessor(use_fast=False) — PIL-based resize
   hf_fast:    AutoImageProcessor(use_fast=True)  — torchvision-based
+  hf_bilinear: AutoImageProcessor(use_fast=True, resample=BILINEAR) — algorithm-matched
   dsl_v1:     DSL build_llava(pipeline, sched_v1) — naive staged pipeline
   dsl_v2:     DSL build_llava(pipeline, sched_v2) — rescale+normalize+CHW fused
   dsl_v3:     DSL build_llava(pipeline, sched_v3) — full fusion, preallocated output
@@ -42,6 +43,7 @@ Usage:
   python benchmarks/bench_dsl_llava.py --workloads W2 W3
   python benchmarks/bench_dsl_llava.py --memory-only
   python benchmarks/bench_dsl_llava.py --timing-only
+  python benchmarks/bench_dsl_llava.py --variants hf_bilinear dsl_v1 dsl_v3
 """
 import gc
 import os
@@ -57,6 +59,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from benchmarks.data import load_images, load_images_w3, load_images_w4
 from benchmarks.measurement import time_fn, measure_memory, env_info
 from benchmarks.models import get_llava_hf_processor
+from transformers.image_utils import PILImageResampling
 from dsl.codegen import build_llava
 from pipelines.llava import pipeline as llava_pipeline, sched_v1, sched_v2, sched_v3
 
@@ -66,7 +69,7 @@ N_WARMUP_W4 = 2
 N_TIMED_W4  = 16
 N_MEMORY_WARMUP = 0
 
-ALL_VARIANTS = ["hf_legacy", "hf_fast", "dsl_v1", "dsl_v2", "dsl_v3"]
+ALL_VARIANTS = ["hf_legacy", "hf_fast", "hf_bilinear", "dsl_v1", "dsl_v2", "dsl_v3"]
 
 
 def _wrap_hf(proc, images):
@@ -87,11 +90,13 @@ def make_calls(images, hf_legacy, hf_fast, dsl_fns, variants=None):
     selected = set(variants)
     dsl_fns = dsl_fns or {}
     all_calls = [
-        ("hf_legacy", lambda: _wrap_hf(hf_legacy, images)),
-        ("hf_fast",   lambda: _wrap_hf(hf_fast,   images)),
-        ("dsl_v1",    lambda: _wrap_dsl(dsl_fns["dsl_v1"], images)),
-        ("dsl_v2",    lambda: _wrap_dsl(dsl_fns["dsl_v2"], images)),
-        ("dsl_v3",    lambda: _wrap_dsl(dsl_fns["dsl_v3"], images)),
+        ("hf_legacy",   lambda: _wrap_hf(hf_legacy, images)),
+        ("hf_fast",     lambda: _wrap_hf(hf_fast,   images)),
+        ("hf_bilinear", lambda: hf_fast(images=images, return_tensors="pt",
+                                        resample=PILImageResampling.BILINEAR)),
+        ("dsl_v1",      lambda: _wrap_dsl(dsl_fns["dsl_v1"], images)),
+        ("dsl_v2",      lambda: _wrap_dsl(dsl_fns["dsl_v2"], images)),
+        ("dsl_v3",      lambda: _wrap_dsl(dsl_fns["dsl_v3"], images)),
     ]
     return [(name, fn) for name, fn in all_calls if name in selected]
 
