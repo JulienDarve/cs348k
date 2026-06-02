@@ -33,6 +33,7 @@ from dsl.templates import (
     make_template_llava_naive,
     make_template_llava_pointwise,
     make_template_llava_full,
+    _patch_output_size,
 )
 from kernels.qwen_v1_naive import smart_resize_dims
 
@@ -317,7 +318,9 @@ def build_llava(pipeline: Pipeline, schedule: Schedule) -> Callable:
             tile_infos.append(select_best_resolution(orig_h, orig_w, grid_pinpoints))
 
         if fusion == "full":
-            # Build flat tile descriptor arrays for the v3 kernel
+            # Build flat tile descriptor arrays for the v3 kernel.
+            # Each row: [orig_h, orig_w, best_h, best_w, t_row, t_col,
+            #            new_h, new_w, pad_top, pad_left]  (10 columns)
             tile_descs_list = []
             img_idx_list = []
             n_tiles_per_image = []
@@ -325,13 +328,21 @@ def build_llava(pipeline: Pipeline, schedule: Schedule) -> Callable:
                 orig_h, orig_w = arr.shape[:2]
                 n_rows = best_h // tile_size
                 n_cols = best_w // tile_size
-                # Thumbnail: sentinel t_row = t_col = -1
-                tile_descs_list.append([orig_h, orig_w, tile_size, tile_size, -1, -1])
+                # Aspect-preserving dims + padding for grid tiles
+                new_h, new_w = _patch_output_size(orig_h, orig_w, best_h, best_w)
+                pad_top  = (best_h - new_h) // 2
+                pad_left = (best_w - new_w) // 2
+                # Thumbnail: direct resize → new_h=tile_size, pad_top=0
+                tile_descs_list.append(
+                    [orig_h, orig_w, tile_size, tile_size, -1, -1,
+                     tile_size, tile_size, 0, 0])
                 img_idx_list.append(b)
                 # Grid tiles in row-major order
                 for r in range(n_rows):
                     for c in range(n_cols):
-                        tile_descs_list.append([orig_h, orig_w, best_h, best_w, r, c])
+                        tile_descs_list.append(
+                            [orig_h, orig_w, best_h, best_w, r, c,
+                             new_h, new_w, pad_top, pad_left])
                         img_idx_list.append(b)
                 n_tiles_per_image.append(1 + n_rows * n_cols)
 

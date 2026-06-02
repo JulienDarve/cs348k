@@ -20,11 +20,26 @@ The factories take a coord registry entry (dsl/coords.py) and any model
 specifics (dims, constants) flow in as @njit kernel arguments at call time.
 """
 
+import math
+
 import numpy as np
 import numba
 from numba import njit, prange
 
 from kernels.bilinear import bilinear_sample, bilinear_resize
+
+
+def _patch_output_size(orig_h, orig_w, target_h, target_w):
+    """Aspect-ratio-preserving resize dims, matching HF get_patch_output_size."""
+    scale_w = target_w / orig_w
+    scale_h = target_h / orig_h
+    if scale_w < scale_h:
+        new_w = target_w
+        new_h = min(math.ceil(orig_h * scale_w), target_h)
+    else:
+        new_h = target_h
+        new_w = min(math.ceil(orig_w * scale_h), target_w)
+    return new_h, new_w
 
 
 # ---------------------------------------------------------------------------
@@ -275,27 +290,34 @@ def make_template_full(coord, parallel_batch: bool):
 def _enumerate_tiles(arr_uint8, best_h, best_w, tile_size):
     """Enumerate AnyRes tiles as float32 HWC arrays in [0, 255].
 
-    Returns list of (tile_size, tile_size, 3) float32 arrays:
-      tiles[0]:    thumbnail — full image bilinear-resized to tile_size×tile_size.
-      tiles[1..N]: grid tiles — full image resized to (best_h, best_w), then
-                   sliced into non-overlapping tile_size×tile_size crops in
-                   row-major order (left-to-right, top-to-bottom).
+    Matches HF LlavaNextImageProcessor exactly:
+      tiles[0]:    thumbnail — full image direct-resized to tile_size×tile_size.
+      tiles[1..N]: grid tiles — full image resized to an aspect-ratio-preserving
+                   sub-size of (best_h, best_w), then center zero-padded to
+                   (best_h, best_w), then sliced into tile_size×tile_size crops.
 
-    Pure Python (not @njit): calls the njit bilinear_resize from Python.
-    Shared by make_template_llava_naive and make_template_llava_pointwise.
+    Zero-padding (value 0.0) means padded pixels normalise to (-mean/std),
+    matching HF which pads before rescale+normalize.
     """
     tiles = []
-    # Tile 0: thumbnail
+    # Tile 0: thumbnail — direct resize (squash), same as HF
     tiles.append(bilinear_resize(arr_uint8, tile_size, tile_size))
-    # Tiles 1..N: grid crops from full-res resize
+    # Tiles 1..N: aspect-preserving resize → center-pad → crop
     n_rows = best_h // tile_size
     n_cols = best_w // tile_size
     if n_rows * n_cols > 0:
-        full_res = bilinear_resize(arr_uint8, best_h, best_w)
+        orig_h, orig_w = arr_uint8.shape[:2]
+        new_h, new_w = _patch_output_size(orig_h, orig_w, best_h, best_w)
+        pad_top  = (best_h - new_h) // 2
+        pad_left = (best_w - new_w) // 2
+        resized = bilinear_resize(arr_uint8, new_h, new_w)
+        c = arr_uint8.shape[2]
+        full_res = np.zeros((best_h, best_w, c), dtype=np.float32)
+        full_res[pad_top:pad_top + new_h, pad_left:pad_left + new_w, :] = resized
         for r in range(n_rows):
-            for c in range(n_cols):
-                y0, x0 = r * tile_size, c * tile_size
-                tiles.append(full_res[y0:y0+tile_size, x0:x0+tile_size, :])
+            for ci in range(n_cols):
+                y0, x0 = r * tile_size, ci * tile_size
+                tiles.append(full_res[y0:y0 + tile_size, x0:x0 + tile_size, :])
     return tiles
 
 
@@ -419,16 +441,17 @@ def make_template_llava_full(parallel_tiles: bool):
     → None kernel.
 
     Mirrors LLaVA v3: zero intermediates. For each output tile, directly
-    bilinear-samples from the original uint8 image using composed coordinates
-    (grid-tile offset + resize scale in one pass), writes rescaled+normalized
-    values to the preallocated CHW output buffer.
+    bilinear-samples from the original uint8 image using composed coordinates,
+    then writes rescaled+normalized values to the preallocated CHW output.
 
-    tile_descs: (N_total, 6) int64 — [orig_h, orig_w, best_h, best_w, t_row, t_col]
-                t_row = t_col = -1 for thumbnail tiles.
-    img_idx:   (N_total,) int64 — which image in imgs each tile belongs to.
-    output:    (N_total, 3, tile_size, tile_size) float32 — preallocated.
+    tile_descs: (N_total, 10) int64 —
+        [orig_h, orig_w, best_h, best_w, t_row, t_col, new_h, new_w, pad_top, pad_left]
+        t_row = t_col = -1 for thumbnail tiles (thumbnail: new_h=tile_size,
+        new_w=tile_size, pad_top=pad_left=0).
+        new_h/new_w are the aspect-preserving resize dims; pad_top/pad_left are
+        the center-padding offsets that place the resized content inside best_res.
 
-    parallel_tiles=True enables prange over N_total_tiles.
+    For grid tiles, pixels in the zero-padded border write (-mean/std) directly.
     """
     if parallel_tiles:
         @njit(parallel=True, cache=True)
@@ -436,57 +459,85 @@ def make_template_llava_full(parallel_tiles: bool):
             n_tiles = np.int64(output.shape[0])
             ts = np.int64(tile_size)
             for t in prange(n_tiles):
-                img = imgs[img_idx[t]]
+                img      = imgs[img_idx[t]]
                 orig_h_f = np.float32(tile_descs[t, 0])
                 orig_w_f = np.float32(tile_descs[t, 1])
-                best_h_f = np.float32(tile_descs[t, 2])
-                best_w_f = np.float32(tile_descs[t, 3])
                 t_row    = tile_descs[t, 4]
                 t_col    = tile_descs[t, 5]
-                sy = orig_h_f / best_h_f
-                sx = orig_w_f / best_w_f
-                if t_row < np.int64(0):   # thumbnail sentinel
-                    row_off = np.float32(0.0)
-                    col_off = np.float32(0.0)
-                else:
-                    row_off = np.float32(t_row * ts)
-                    col_off = np.float32(t_col * ts)
-                for y in range(ts):
-                    for x in range(ts):
-                        src_y = (row_off + np.float32(y) + np.float32(0.5)) * sy - np.float32(0.5)
-                        src_x = (col_off + np.float32(x) + np.float32(0.5)) * sx - np.float32(0.5)
-                        pixel = bilinear_sample(img, src_x, src_y)
-                        for ch in range(np.int64(3)):
-                            r = pixel[ch] * scale
-                            output[t, ch, y, x] = (r - mean[ch]) / std[ch]
+                new_h    = tile_descs[t, 6]
+                new_w    = tile_descs[t, 7]
+                pad_top  = tile_descs[t, 8]
+                pad_left = tile_descs[t, 9]
+                sy = orig_h_f / np.float32(new_h)
+                sx = orig_w_f / np.float32(new_w)
+                if t_row < np.int64(0):  # thumbnail: direct resize
+                    for y in range(ts):
+                        for x in range(ts):
+                            src_y = (np.float32(y) + np.float32(0.5)) * sy - np.float32(0.5)
+                            src_x = (np.float32(x) + np.float32(0.5)) * sx - np.float32(0.5)
+                            pixel = bilinear_sample(img, src_x, src_y)
+                            for ch in range(np.int64(3)):
+                                output[t, ch, y, x] = (pixel[ch] * scale - mean[ch]) / std[ch]
+                else:  # grid tile: aspect-preserving resize + zero-pad
+                    row_off = t_row * ts
+                    col_off = t_col * ts
+                    for y in range(ts):
+                        for x in range(ts):
+                            gy = row_off + np.int64(y)
+                            gx = col_off + np.int64(x)
+                            cy = gy - pad_top
+                            cx = gx - pad_left
+                            if cy < np.int64(0) or cy >= new_h or cx < np.int64(0) or cx >= new_w:
+                                for ch in range(np.int64(3)):
+                                    output[t, ch, y, x] = -mean[ch] / std[ch]
+                            else:
+                                src_y = (np.float32(cy) + np.float32(0.5)) * sy - np.float32(0.5)
+                                src_x = (np.float32(cx) + np.float32(0.5)) * sx - np.float32(0.5)
+                                pixel = bilinear_sample(img, src_x, src_y)
+                                for ch in range(np.int64(3)):
+                                    output[t, ch, y, x] = (pixel[ch] * scale - mean[ch]) / std[ch]
     else:
         @njit(cache=True)
         def kernel(imgs, tile_descs, img_idx, output, mean, std, scale, tile_size):
             n_tiles = np.int64(output.shape[0])
             ts = np.int64(tile_size)
             for t in range(n_tiles):
-                img = imgs[img_idx[t]]
+                img      = imgs[img_idx[t]]
                 orig_h_f = np.float32(tile_descs[t, 0])
                 orig_w_f = np.float32(tile_descs[t, 1])
-                best_h_f = np.float32(tile_descs[t, 2])
-                best_w_f = np.float32(tile_descs[t, 3])
                 t_row    = tile_descs[t, 4]
                 t_col    = tile_descs[t, 5]
-                sy = orig_h_f / best_h_f
-                sx = orig_w_f / best_w_f
-                if t_row < np.int64(0):
-                    row_off = np.float32(0.0)
-                    col_off = np.float32(0.0)
-                else:
-                    row_off = np.float32(t_row * ts)
-                    col_off = np.float32(t_col * ts)
-                for y in range(ts):
-                    for x in range(ts):
-                        src_y = (row_off + np.float32(y) + np.float32(0.5)) * sy - np.float32(0.5)
-                        src_x = (col_off + np.float32(x) + np.float32(0.5)) * sx - np.float32(0.5)
-                        pixel = bilinear_sample(img, src_x, src_y)
-                        for ch in range(np.int64(3)):
-                            r = pixel[ch] * scale
-                            output[t, ch, y, x] = (r - mean[ch]) / std[ch]
+                new_h    = tile_descs[t, 6]
+                new_w    = tile_descs[t, 7]
+                pad_top  = tile_descs[t, 8]
+                pad_left = tile_descs[t, 9]
+                sy = orig_h_f / np.float32(new_h)
+                sx = orig_w_f / np.float32(new_w)
+                if t_row < np.int64(0):  # thumbnail: direct resize
+                    for y in range(ts):
+                        for x in range(ts):
+                            src_y = (np.float32(y) + np.float32(0.5)) * sy - np.float32(0.5)
+                            src_x = (np.float32(x) + np.float32(0.5)) * sx - np.float32(0.5)
+                            pixel = bilinear_sample(img, src_x, src_y)
+                            for ch in range(np.int64(3)):
+                                output[t, ch, y, x] = (pixel[ch] * scale - mean[ch]) / std[ch]
+                else:  # grid tile: aspect-preserving resize + zero-pad
+                    row_off = t_row * ts
+                    col_off = t_col * ts
+                    for y in range(ts):
+                        for x in range(ts):
+                            gy = row_off + np.int64(y)
+                            gx = col_off + np.int64(x)
+                            cy = gy - pad_top
+                            cx = gx - pad_left
+                            if cy < np.int64(0) or cy >= new_h or cx < np.int64(0) or cx >= new_w:
+                                for ch in range(np.int64(3)):
+                                    output[t, ch, y, x] = -mean[ch] / std[ch]
+                            else:
+                                src_y = (np.float32(cy) + np.float32(0.5)) * sy - np.float32(0.5)
+                                src_x = (np.float32(cx) + np.float32(0.5)) * sx - np.float32(0.5)
+                                pixel = bilinear_sample(img, src_x, src_y)
+                                for ch in range(np.int64(3)):
+                                    output[t, ch, y, x] = (pixel[ch] * scale - mean[ch]) / std[ch]
 
     return kernel
