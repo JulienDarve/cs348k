@@ -125,8 +125,8 @@ def get_qwen_multithread_headline() -> dict[str, object]:
 def get_qwen_thread_scaling() -> dict[str, object]:
     single = load_markdown_results("results/aws/bench_dsl_results_single_thread.md")
     multi = load_markdown_results("results/aws/bench_dsl_results_multi_thread.md")
-    model_order = ["hf_fast", "v3", "dsl_v3"]
-    labels = {"hf_fast": "HF Fast", "v3": "Hand v3", "dsl_v3": "DSL v3"}
+    model_order = ["hf_legacy", "hf_fast", "v3", "dsl_v3"]
+    labels = {"hf_legacy": "HF Legacy", "hf_fast": "HF Fast", "v3": "Hand v3", "dsl_v3": "DSL v3"}
     values: dict[str, list[float]] = {labels[model]: [] for model in model_order}
 
     for workload in WORKLOADS:

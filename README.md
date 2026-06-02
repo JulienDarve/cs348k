@@ -108,7 +108,7 @@ Contains Python scripts for creating visualizations from the output data.
 
 - `final_qwen_singlethread_speedup.png`: Shows single-thread Qwen runtime speedups over HF Fast for HF, hand-written, and DSL implementations.
 
-- `final_qwen_thread_scaling.png`: Shows Qwen 1-thread to 8-thread scaling for HF Fast, hand v3, and DSL v3.
+- `final_qwen_thread_scaling.png`: Shows Qwen 1-thread to 8-thread scaling for HF Legacy, HF Fast, hand v3, and DSL v3.
 
 - `final_qwen_dsl_schedule_ablation.png`: Shows single-thread and 8-thread DSL v1/v2/v3 schedule speedups over DSL v1.
 
