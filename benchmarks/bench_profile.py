@@ -73,7 +73,7 @@ from transformers.image_utils import PILImageResampling
 N_WARMUP_CPROFILE = 3
 N_WARMUP_STAGE    = 3
 N_TIMED_STAGE     = 5
-N_TIMED_STAGE_W4  = 2   # W4 passes take ~1s each; 5 is enough for a stable median
+N_TIMED_STAGE_W4  = 3   # W4 passes take ~1s each; 3 is minimum for a valid median
 DEFAULT_PROFILES_DIR = Path("profiles")
 
 QWEN_CPROFILE_VARIANTS = ["hf_fast", "hf_bilinear", "dsl_v1", "dsl_v2", "dsl_v3"]
