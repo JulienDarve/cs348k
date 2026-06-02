@@ -66,13 +66,9 @@ _NAMES = pipeline.names  # ["resize", "rescale", "normalize", "patchify"]
 # Three schedules over the one algorithm
 # ---------------------------------------------------------------------------
 
-# v1 — every stage its own loop + buffer; no parallelism.
+# v1 — every stage its own loop + buffer; parallel over batch axis.
+# prange with 1 thread runs serially, so this schedule is correct at any thread count.
 sched_v1 = Schedule(
-    stages={n: StageSchedule() for n in _NAMES},
-    preallocate_output=False,
-)
-
-sched_v1_batch = Schedule(
     stages={
         **{n: StageSchedule() for n in _NAMES},
         "resize": StageSchedule(parallel="batch"),
@@ -80,39 +76,19 @@ sched_v1_batch = Schedule(
     preallocate_output=False,
 )
 
-# v2 — rescale and normalize inlined into the resize pixel loop.
+# v2 — rescale and normalize inlined into the resize pixel loop; parallel over batch axis.
 sched_v2 = Schedule(
     stages={
         **{n: StageSchedule() for n in _NAMES},
+        "resize":    StageSchedule(parallel="batch"),
         "rescale":   StageSchedule(compute_at="inline"),
         "normalize": StageSchedule(compute_at="inline"),
     },
     preallocate_output=False,
-)
-
-sched_v2_batch = Schedule(
-    stages={
-        **{n: StageSchedule() for n in _NAMES},
-        "resize": StageSchedule(parallel="batch"),
-        "rescale":   StageSchedule(compute_at="inline"),
-        "normalize": StageSchedule(compute_at="inline"),
-    },
-    preallocate_output=False,
-)
-
-sched_v3_serial = Schedule(
-    stages={
-        **{n: StageSchedule(compute_at="inline") for n in _NAMES},
-        "patchify": StageSchedule(
-            compute_at="inline",
-            store_at="root",
-            write_via="qwen_patch_coords",
-        ),
-    },
-    preallocate_output=True,
 )
 
 # v3 — full fusion, write directly into pre-allocated output, parallel(batch).
+# prange with 1 thread runs serially, so this schedule is correct at any thread count.
 sched_v3 = Schedule(
     stages={
         **{n: StageSchedule(compute_at="inline") for n in _NAMES},
@@ -129,9 +105,6 @@ sched_v3 = Schedule(
 
 SCHEDULES = {
     "v1": sched_v1,
-    "v1_batch": sched_v1_batch,
     "v2": sched_v2,
-    "v2_batch": sched_v2_batch,
-    "v3_serial": sched_v3_serial,
     "v3": sched_v3,
 }

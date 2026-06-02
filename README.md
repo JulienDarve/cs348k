@@ -32,6 +32,8 @@ Please go to `MILESTONE_2.md` for the write up and results for Milestone 2!
 
 - `MILESTONE_2_AWS_CHARTS.md` Recreates the Milestone 2 markdown charts using only the AWS result tables.
 
+- `MILESTONE_2_AWS_BATCH_DSL_CHART.md` Compares attached AWS batch DSL runtime and memory results against the multi-thread Hugging Face Qwen baselines.
+
 - `pyproject.toml` `poetry.lock` Poetry dependancy management
 
 ### `benchmarks/`

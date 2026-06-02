@@ -73,10 +73,7 @@ from dsl.codegen import build
 from pipelines.qwen import (
     pipeline as qwen_pipeline,
     sched_v1,
-    sched_v1_batch,
     sched_v2,
-    sched_v2_batch,
-    sched_v3_serial,
     sched_v3,
 )
 
@@ -143,9 +140,7 @@ ALL_VARIANTS = [
     "v1", "v1_batch",
     "v2", "v2_batch",
     "v3_serial", "v3",
-    "dsl_v1", "dsl_v1_batch",
-    "dsl_v2", "dsl_v2_batch",
-    "dsl_v3_serial", "dsl_v3",
+    "dsl_v1", "dsl_v2", "dsl_v3",
 ]
 
 
@@ -170,12 +165,9 @@ def make_calls(images, q_legacy, q_fast, proc_fast, variants=None, dsl_fns=None)
         ("v2_batch",    lambda: _wrap_v2_batch(images, proc_fast)),
         ("v3_serial",   lambda: _wrap_v3_serial(images, proc_fast)),
         ("v3",          lambda: _wrap_v3(images, proc_fast)),
-        ("dsl_v1",      lambda: _wrap_dsl(dsl_fns["dsl_v1"], images, proc_fast)),
-        ("dsl_v1_batch", lambda: _wrap_dsl(dsl_fns["dsl_v1_batch"], images, proc_fast)),
-        ("dsl_v2",      lambda: _wrap_dsl(dsl_fns["dsl_v2"], images, proc_fast)),
-        ("dsl_v2_batch", lambda: _wrap_dsl(dsl_fns["dsl_v2_batch"], images, proc_fast)),
-        ("dsl_v3_serial", lambda: _wrap_dsl(dsl_fns["dsl_v3_serial"], images, proc_fast)),
-        ("dsl_v3",      lambda: _wrap_dsl(dsl_fns["dsl_v3"], images, proc_fast)),
+        ("dsl_v1",  lambda: _wrap_dsl(dsl_fns["dsl_v1"], images, proc_fast)),
+        ("dsl_v2",  lambda: _wrap_dsl(dsl_fns["dsl_v2"], images, proc_fast)),
+        ("dsl_v3",  lambda: _wrap_dsl(dsl_fns["dsl_v3"], images, proc_fast)),
     ]
     return [(name, fn) for name, fn in all_calls if name in selected]
 
@@ -335,12 +327,9 @@ def main():
     needs_v2_batch      = variants is None or "v2_batch"      in variants
     needs_v3_serial     = variants is None or "v3_serial"     in variants
     needs_v3            = variants is None or "v3"            in variants
-    needs_dsl_v1        = variants is None or "dsl_v1"        in variants
-    needs_dsl_v1_batch  = variants is None or "dsl_v1_batch"  in variants
-    needs_dsl_v2        = variants is None or "dsl_v2"        in variants
-    needs_dsl_v2_batch  = variants is None or "dsl_v2_batch"  in variants
-    needs_dsl_v3_serial = variants is None or "dsl_v3_serial" in variants
-    needs_dsl_v3        = variants is None or "dsl_v3"        in variants
+    needs_dsl_v1 = variants is None or "dsl_v1" in variants
+    needs_dsl_v2 = variants is None or "dsl_v2" in variants
+    needs_dsl_v3 = variants is None or "dsl_v3" in variants
     if needs_v1 or needs_v1_batch or needs_v2 or needs_v2_batch or needs_v3_serial or needs_v3:
         print("\nWarming up Numba JIT for v1/v2/v3 (first call compiles, ~30s)...")
         if needs_v1:
@@ -359,25 +348,14 @@ def main():
 
     # Build DSL callables (also triggers Numba JIT for each fusion template).
     dsl_fns = {}
-    if (needs_dsl_v1 or needs_dsl_v1_batch or
-            needs_dsl_v2 or needs_dsl_v2_batch or
-            needs_dsl_v3_serial or needs_dsl_v3):
+    if needs_dsl_v1 or needs_dsl_v2 or needs_dsl_v3:
         print("\nBuilding DSL variants and warming up Numba JIT (~30s each)...")
         if needs_dsl_v1:
             dsl_fns["dsl_v1"] = build(qwen_pipeline, sched_v1)
             _wrap_dsl(dsl_fns["dsl_v1"], first_images[:1], proc_fast)
-        if needs_dsl_v1_batch:
-            dsl_fns["dsl_v1_batch"] = build(qwen_pipeline, sched_v1_batch)
-            _wrap_dsl(dsl_fns["dsl_v1_batch"], first_images[:1], proc_fast)
         if needs_dsl_v2:
             dsl_fns["dsl_v2"] = build(qwen_pipeline, sched_v2)
             _wrap_dsl(dsl_fns["dsl_v2"], first_images[:1], proc_fast)
-        if needs_dsl_v2_batch:
-            dsl_fns["dsl_v2_batch"] = build(qwen_pipeline, sched_v2_batch)
-            _wrap_dsl(dsl_fns["dsl_v2_batch"], first_images[:1], proc_fast)
-        if needs_dsl_v3_serial:
-            dsl_fns["dsl_v3_serial"] = build(qwen_pipeline, sched_v3_serial)
-            _wrap_dsl(dsl_fns["dsl_v3_serial"], first_images[:1], proc_fast)
         if needs_dsl_v3:
             dsl_fns["dsl_v3"] = build(qwen_pipeline, sched_v3)
             _wrap_dsl(dsl_fns["dsl_v3"], first_images[:1], proc_fast)
