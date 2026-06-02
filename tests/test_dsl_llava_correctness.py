@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from benchmarks.data import load_images, load_images_w3, load_images_smooth
 from benchmarks.models import get_llava_hf_processor
 from dsl.codegen import build_llava, classify_fusion_llava
+from dsl.schedule import Schedule, StageSchedule
 from pipelines.llava import (
     pipeline as llava_pipeline,
     sched_v1, sched_v2, sched_v3,
@@ -234,6 +235,36 @@ def main():
     all_passed = all_passed and ok
     ok = _compare_vs_hf(pv3_s, nt3_s, hf_pv_s, "DSL-v3 vs HF (smooth)", atol=0.05)
     all_passed = all_passed and ok
+
+    # ------------------------------------------------------------------
+    # 5b. Parallel v1/v2 vs serial v1/v2 — verifies prange(1 thread) ≡ serial
+    # ------------------------------------------------------------------
+    print("\n--- Check 5b: parallel v1/v2 vs serial v1/v2 (max_abs_diff <= 1e-4) ---")
+    _names = llava_pipeline.names
+    sched_v1_serial = Schedule(
+        stages={n: StageSchedule() for n in _names},
+        preallocate_output=False,
+    )
+    sched_v2_serial = Schedule(
+        stages={
+            **{n: StageSchedule() for n in _names},
+            "rescale":   StageSchedule(compute_at="inline"),
+            "normalize": StageSchedule(compute_at="inline"),
+        },
+        preallocate_output=False,
+    )
+    dsl_v1_serial = build_llava(llava_pipeline, sched_v1_serial)
+    dsl_v2_serial = build_llava(llava_pipeline, sched_v2_serial)
+
+    for label, pv_par, pv_ser in [
+        ("v1 parallel vs serial (noise)",  pv1_n, dsl_v1_serial(images_noise)[0]),
+        ("v2 parallel vs serial (noise)",  pv2_n, dsl_v2_serial(images_noise)[0]),
+        ("v1 parallel vs serial (smooth)", pv1_s, dsl_v1_serial(images_smooth)[0]),
+        ("v2 parallel vs serial (smooth)", pv2_s, dsl_v2_serial(images_smooth)[0]),
+    ]:
+        max_diff = float(np.max(np.abs(pv_par - pv_ser)))
+        ok = check(label + " <= 1e-4", max_diff <= 1e-4, f"max_diff={max_diff:.2e}")
+        all_passed = all_passed and ok
 
     print(f"\n{'All checks passed.' if all_passed else 'Some checks FAILED.'}")
     sys.exit(0 if all_passed else 1)

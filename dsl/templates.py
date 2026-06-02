@@ -412,14 +412,135 @@ def _enumerate_tiles(arr_uint8, best_h, best_w, tile_size):
 # template_llava_naive — every stage its own loop + buffer (v1 schedule)
 # ---------------------------------------------------------------------------
 
-def make_template_llava_naive():
-    """Return a (imgs_uint8, tile_infos, mean, std, scale, tile_size)
-    → (pixel_values, n_tiles_per_image) callable.
+def make_template_llava_naive(parallel_tiles: bool = False):
+    """Return a callable preprocessor for LLaVA v1 (naive staged pipeline).
 
-    Mirrors LLaVA v1: four separate @njit kernels per tile, four buffers,
-    np.stack at the end. Still materializes the full-res intermediate for
-    grid tiles.
+    parallel_tiles=False (default):
+      Returns (imgs_uint8, tile_infos, mean, std, scale, tile_size)
+      → (pixel_values, n_tiles_per_image).
+      Four separate @njit kernels per tile, four HWC buffers, np.stack at end.
+      Still materializes the full-res intermediate for grid tiles.
+
+    parallel_tiles=True:
+      Returns a @njit(parallel=True) kernel with the tile_descs calling
+      convention (same as make_template_llava_full).
+      Accepts (imgs, tile_descs, img_idx, output, mean, std, scale, tile_size)
+      → None. prange over tiles; within each tile runs four staged passes
+      (resize→HWC buf, rescale→HWC buf2, normalize→HWC buf3, CHW copy to
+      output[t]) with thread-local intermediate allocations.
     """
+
+    if parallel_tiles:
+        @njit(parallel=True, cache=True)
+        def kernel(imgs, tile_descs, img_idx, output, mean, std, scale, tile_size):
+            n_tiles = np.int64(output.shape[0])
+            ts = np.int64(tile_size)
+            sc32 = np.float32(scale)
+            for t in prange(n_tiles):
+                img      = imgs[img_idx[t]]
+                orig_h   = tile_descs[t, 0]
+                orig_w   = tile_descs[t, 1]
+                t_row    = tile_descs[t, 4]
+                t_col    = tile_descs[t, 5]
+                new_h    = tile_descs[t, 6]
+                new_w    = tile_descs[t, 7]
+                pad_top  = tile_descs[t, 8]
+                pad_left = tile_descs[t, 9]
+                sy    = np.float64(orig_h) / np.float64(new_h)
+                sx    = np.float64(orig_w) / np.float64(new_w)
+                sup_y = max(1.0, sy)
+                sup_x = max(1.0, sx)
+                # Stage 1: bilinear sample → tile_buf (HWC float32 in [0,255])
+                tile_buf = np.empty((ts, ts, 3), dtype=np.float32)
+                if t_row < np.int64(0):  # thumbnail: direct resize
+                    for y in range(ts):
+                        cy = (np.float64(y) + 0.5) * sy - 0.5
+                        y_lo = max(np.int64(0), np.int64(math.floor(cy - sup_y)))
+                        y_hi = min(orig_h,       np.int64(math.ceil(cy + sup_y)))
+                        for x in range(ts):
+                            cx = (np.float64(x) + 0.5) * sx - 0.5
+                            x_lo = max(np.int64(0), np.int64(math.floor(cx - sup_x)))
+                            x_hi = min(orig_w,       np.int64(math.ceil(cx + sup_x)))
+                            acc0 = acc1 = acc2 = 0.0
+                            tw = 0.0
+                            for si in range(y_lo, y_hi):
+                                wy = max(0.0, 1.0 - abs(np.float64(si) - cy) / sup_y)
+                                for sj in range(x_lo, x_hi):
+                                    wx = max(0.0, 1.0 - abs(np.float64(sj) - cx) / sup_x)
+                                    w_ij = wy * wx
+                                    if w_ij > 0.0:
+                                        acc0 += w_ij * img[si, sj, 0]
+                                        acc1 += w_ij * img[si, sj, 1]
+                                        acc2 += w_ij * img[si, sj, 2]
+                                        tw += w_ij
+                            if tw > 0.0:
+                                tile_buf[y, x, 0] = np.float32(acc0 / tw)
+                                tile_buf[y, x, 1] = np.float32(acc1 / tw)
+                                tile_buf[y, x, 2] = np.float32(acc2 / tw)
+                            else:
+                                tile_buf[y, x, 0] = np.float32(0.0)
+                                tile_buf[y, x, 1] = np.float32(0.0)
+                                tile_buf[y, x, 2] = np.float32(0.0)
+                else:  # grid tile: aspect-preserving resize + zero-pad
+                    row_off = t_row * ts
+                    col_off = t_col * ts
+                    for y in range(ts):
+                        for x in range(ts):
+                            gy  = row_off + np.int64(y)
+                            gx  = col_off + np.int64(x)
+                            cyi = gy - pad_top
+                            cxi = gx - pad_left
+                            if (cyi < np.int64(0) or cyi >= new_h
+                                    or cxi < np.int64(0) or cxi >= new_w):
+                                tile_buf[y, x, 0] = np.float32(0.0)
+                                tile_buf[y, x, 1] = np.float32(0.0)
+                                tile_buf[y, x, 2] = np.float32(0.0)
+                            else:
+                                cy = (np.float64(cyi) + 0.5) * sy - 0.5
+                                cx = (np.float64(cxi) + 0.5) * sx - 0.5
+                                y_lo = max(np.int64(0), np.int64(math.floor(cy - sup_y)))
+                                y_hi = min(orig_h,       np.int64(math.ceil(cy + sup_y)))
+                                x_lo = max(np.int64(0), np.int64(math.floor(cx - sup_x)))
+                                x_hi = min(orig_w,       np.int64(math.ceil(cx + sup_x)))
+                                acc0 = acc1 = acc2 = 0.0
+                                tw = 0.0
+                                for si in range(y_lo, y_hi):
+                                    wy = max(0.0, 1.0 - abs(np.float64(si) - cy) / sup_y)
+                                    for sj in range(x_lo, x_hi):
+                                        wx = max(0.0, 1.0 - abs(np.float64(sj) - cx) / sup_x)
+                                        w_ij = wy * wx
+                                        if w_ij > 0.0:
+                                            acc0 += w_ij * img[si, sj, 0]
+                                            acc1 += w_ij * img[si, sj, 1]
+                                            acc2 += w_ij * img[si, sj, 2]
+                                            tw += w_ij
+                                if tw > 0.0:
+                                    tile_buf[y, x, 0] = np.float32(acc0 / tw)
+                                    tile_buf[y, x, 1] = np.float32(acc1 / tw)
+                                    tile_buf[y, x, 2] = np.float32(acc2 / tw)
+                                else:
+                                    tile_buf[y, x, 0] = np.float32(0.0)
+                                    tile_buf[y, x, 1] = np.float32(0.0)
+                                    tile_buf[y, x, 2] = np.float32(0.0)
+                # Stage 2: rescale (multiply by 1/255)
+                rescaled = np.empty((ts, ts, 3), dtype=np.float32)
+                for y in range(ts):
+                    for x in range(ts):
+                        for ch in range(3):
+                            rescaled[y, x, ch] = tile_buf[y, x, ch] * sc32
+                # Stage 3: normalize
+                normalized = np.empty((ts, ts, 3), dtype=np.float32)
+                for y in range(ts):
+                    for x in range(ts):
+                        for ch in range(3):
+                            normalized[y, x, ch] = (rescaled[y, x, ch] - mean[ch]) / std[ch]
+                # Stage 4: CHW copy to preallocated output
+                for ch in range(3):
+                    for y in range(ts):
+                        for x in range(ts):
+                            output[t, ch, y, x] = normalized[y, x, ch]
+
+        return kernel
 
     @njit(cache=True)
     def _rescale_tile(tile_hwc, scale):
@@ -477,15 +598,123 @@ def make_template_llava_naive():
 # template_llava_pointwise — rescale+normalize+CHW fused per tile (v2 schedule)
 # ---------------------------------------------------------------------------
 
-def make_template_llava_pointwise():
-    """Return a (imgs_uint8, tile_infos, mean, std, scale, tile_size)
-    → (pixel_values, n_tiles_per_image) callable.
+def make_template_llava_pointwise(parallel_tiles: bool = False):
+    """Return a callable preprocessor for LLaVA v2 (pointwise fused pipeline).
 
-    Mirrors LLaVA v2: one fused kernel per tile that rescales, normalizes,
-    and transposes to CHW in a single loop. Eliminates the three separate
-    per-tile HWC intermediate buffers; the full-res resize intermediate is
-    still allocated for grid tiles.
+    parallel_tiles=False (default):
+      Returns (imgs_uint8, tile_infos, mean, std, scale, tile_size)
+      → (pixel_values, n_tiles_per_image).
+      One fused rescale+normalize+CHW kernel per tile; still materializes
+      the full-res resize intermediate for grid tiles.
+
+    parallel_tiles=True:
+      Returns a @njit(parallel=True) kernel with the tile_descs calling
+      convention (same as make_template_llava_full).
+      Accepts (imgs, tile_descs, img_idx, output, mean, std, scale, tile_size)
+      → None. prange over tiles; within each tile: bilinear sample → HWC buf
+      (alloc 1), then fused rescale+normalize+CHW write to output[t].
     """
+
+    if parallel_tiles:
+        @njit(parallel=True, cache=True)
+        def kernel(imgs, tile_descs, img_idx, output, mean, std, scale, tile_size):
+            n_tiles = np.int64(output.shape[0])
+            ts = np.int64(tile_size)
+            sc32 = np.float32(scale)
+            for t in prange(n_tiles):
+                img      = imgs[img_idx[t]]
+                orig_h   = tile_descs[t, 0]
+                orig_w   = tile_descs[t, 1]
+                t_row    = tile_descs[t, 4]
+                t_col    = tile_descs[t, 5]
+                new_h    = tile_descs[t, 6]
+                new_w    = tile_descs[t, 7]
+                pad_top  = tile_descs[t, 8]
+                pad_left = tile_descs[t, 9]
+                sy    = np.float64(orig_h) / np.float64(new_h)
+                sx    = np.float64(orig_w) / np.float64(new_w)
+                sup_y = max(1.0, sy)
+                sup_x = max(1.0, sx)
+                # Stage 1: bilinear sample → tile_buf (HWC float32 in [0,255])
+                tile_buf = np.empty((ts, ts, 3), dtype=np.float32)
+                if t_row < np.int64(0):  # thumbnail: direct resize
+                    for y in range(ts):
+                        cy = (np.float64(y) + 0.5) * sy - 0.5
+                        y_lo = max(np.int64(0), np.int64(math.floor(cy - sup_y)))
+                        y_hi = min(orig_h,       np.int64(math.ceil(cy + sup_y)))
+                        for x in range(ts):
+                            cx = (np.float64(x) + 0.5) * sx - 0.5
+                            x_lo = max(np.int64(0), np.int64(math.floor(cx - sup_x)))
+                            x_hi = min(orig_w,       np.int64(math.ceil(cx + sup_x)))
+                            acc0 = acc1 = acc2 = 0.0
+                            tw = 0.0
+                            for si in range(y_lo, y_hi):
+                                wy = max(0.0, 1.0 - abs(np.float64(si) - cy) / sup_y)
+                                for sj in range(x_lo, x_hi):
+                                    wx = max(0.0, 1.0 - abs(np.float64(sj) - cx) / sup_x)
+                                    w_ij = wy * wx
+                                    if w_ij > 0.0:
+                                        acc0 += w_ij * img[si, sj, 0]
+                                        acc1 += w_ij * img[si, sj, 1]
+                                        acc2 += w_ij * img[si, sj, 2]
+                                        tw += w_ij
+                            if tw > 0.0:
+                                tile_buf[y, x, 0] = np.float32(acc0 / tw)
+                                tile_buf[y, x, 1] = np.float32(acc1 / tw)
+                                tile_buf[y, x, 2] = np.float32(acc2 / tw)
+                            else:
+                                tile_buf[y, x, 0] = np.float32(0.0)
+                                tile_buf[y, x, 1] = np.float32(0.0)
+                                tile_buf[y, x, 2] = np.float32(0.0)
+                else:  # grid tile: aspect-preserving resize + zero-pad
+                    row_off = t_row * ts
+                    col_off = t_col * ts
+                    for y in range(ts):
+                        for x in range(ts):
+                            gy  = row_off + np.int64(y)
+                            gx  = col_off + np.int64(x)
+                            cyi = gy - pad_top
+                            cxi = gx - pad_left
+                            if (cyi < np.int64(0) or cyi >= new_h
+                                    or cxi < np.int64(0) or cxi >= new_w):
+                                tile_buf[y, x, 0] = np.float32(0.0)
+                                tile_buf[y, x, 1] = np.float32(0.0)
+                                tile_buf[y, x, 2] = np.float32(0.0)
+                            else:
+                                cy = (np.float64(cyi) + 0.5) * sy - 0.5
+                                cx = (np.float64(cxi) + 0.5) * sx - 0.5
+                                y_lo = max(np.int64(0), np.int64(math.floor(cy - sup_y)))
+                                y_hi = min(orig_h,       np.int64(math.ceil(cy + sup_y)))
+                                x_lo = max(np.int64(0), np.int64(math.floor(cx - sup_x)))
+                                x_hi = min(orig_w,       np.int64(math.ceil(cx + sup_x)))
+                                acc0 = acc1 = acc2 = 0.0
+                                tw = 0.0
+                                for si in range(y_lo, y_hi):
+                                    wy = max(0.0, 1.0 - abs(np.float64(si) - cy) / sup_y)
+                                    for sj in range(x_lo, x_hi):
+                                        wx = max(0.0, 1.0 - abs(np.float64(sj) - cx) / sup_x)
+                                        w_ij = wy * wx
+                                        if w_ij > 0.0:
+                                            acc0 += w_ij * img[si, sj, 0]
+                                            acc1 += w_ij * img[si, sj, 1]
+                                            acc2 += w_ij * img[si, sj, 2]
+                                            tw += w_ij
+                                if tw > 0.0:
+                                    tile_buf[y, x, 0] = np.float32(acc0 / tw)
+                                    tile_buf[y, x, 1] = np.float32(acc1 / tw)
+                                    tile_buf[y, x, 2] = np.float32(acc2 / tw)
+                                else:
+                                    tile_buf[y, x, 0] = np.float32(0.0)
+                                    tile_buf[y, x, 1] = np.float32(0.0)
+                                    tile_buf[y, x, 2] = np.float32(0.0)
+                # Stage 2: fused rescale + normalize + CHW write to output
+                for ch in range(3):
+                    for y in range(ts):
+                        for x in range(ts):
+                            r = tile_buf[y, x, ch] * sc32
+                            output[t, ch, y, x] = (r - mean[ch]) / std[ch]
+
+        return kernel
 
     @njit(cache=True)
     def _rescale_normalize_chw(tile_hwc, mean, std, scale):

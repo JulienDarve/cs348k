@@ -295,9 +295,9 @@ def build_llava(pipeline: Pipeline, schedule: Schedule) -> Callable:
     parallel = schedule.parallel_axis() == "batch"
 
     if fusion == "naive":
-        template = make_template_llava_naive()
+        template = make_template_llava_naive(parallel_tiles=parallel)
     elif fusion == "pointwise":
-        template = make_template_llava_pointwise()
+        template = make_template_llava_pointwise(parallel_tiles=parallel)
     elif fusion == "full":
         template = make_template_llava_full(parallel_tiles=parallel)
     else:
@@ -317,10 +317,11 @@ def build_llava(pipeline: Pipeline, schedule: Schedule) -> Callable:
             orig_h, orig_w = arr.shape[:2]
             tile_infos.append(select_best_resolution(orig_h, orig_w, grid_pinpoints))
 
-        if fusion == "full":
-            # Build flat tile descriptor arrays for the v3 kernel.
+        if fusion == "full" or parallel:
+            # Build flat tile descriptor arrays for the prange kernel.
             # Each row: [orig_h, orig_w, best_h, best_w, t_row, t_col,
             #            new_h, new_w, pad_top, pad_left]  (10 columns)
+            # t_row = t_col = -1 for thumbnail tiles.
             tile_descs_list = []
             img_idx_list = []
             n_tiles_per_image = []
@@ -357,7 +358,7 @@ def build_llava(pipeline: Pipeline, schedule: Schedule) -> Callable:
             pv = output
             n_tiles_arr = np.array(n_tiles_per_image, dtype=np.int64)
         else:
-            # naive / pointwise: template returns (pv, n_tiles_per_image)
+            # serial naive / pointwise: template returns (pv, n_tiles_per_image)
             pv, n_tiles_arr = template(arrs, tile_infos, mean, std, scale, tile_size)
 
         return pv, n_tiles_arr

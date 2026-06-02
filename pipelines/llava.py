@@ -72,18 +72,22 @@ _NAMES = pipeline.names  # ["tile", "rescale", "normalize"]
 # Three schedules over the one algorithm
 # ---------------------------------------------------------------------------
 
-# v1 — every stage its own loop + buffer; no parallelism.
-# Materializes: full-res intermediate + per-tile rescale/normalize/CHW buffers.
+# v1 — every stage its own loop + buffer; parallel over tile axis.
+# prange with 1 thread runs serially, so this schedule is correct at any thread count.
 sched_v1 = Schedule(
-    stages={n: StageSchedule() for n in _NAMES},
+    stages={
+        **{n: StageSchedule() for n in _NAMES},
+        "tile": StageSchedule(parallel="batch"),
+    },
     preallocate_output=False,
 )
 
-# v2 — rescale + normalize + CHW-transpose fused into one kernel per tile.
-# Materializes: full-res intermediate only; per-tile goes straight to CHW.
+# v2 — rescale + normalize + CHW-transpose fused into one kernel per tile; parallel over tiles.
+# prange with 1 thread runs serially, so this schedule is correct at any thread count.
 sched_v2 = Schedule(
     stages={
         **{n: StageSchedule() for n in _NAMES},
+        "tile":      StageSchedule(parallel="batch"),
         "rescale":   StageSchedule(compute_at="inline"),
         "normalize": StageSchedule(compute_at="inline"),
     },
