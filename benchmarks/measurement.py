@@ -1,6 +1,7 @@
 import cProfile
 import gc
 import io
+import os
 import platform
 import pstats
 import re
@@ -92,13 +93,20 @@ def output_shape(out):
 
 
 def profile_fn(name, fn, out_path, top_n=20):
-    """Run fn under cProfile and write profile stats to out_path."""
+    """Run fn under cProfile and write profile stats to out_path.
+
+    Also writes a sibling .pstats file so stage extraction can use the full
+    call graph instead of only the printed top-N rows.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    stats_path = out_path.with_suffix(out_path.suffix + ".pstats")
 
     pr = cProfile.Profile()
     pr.enable()
     result = fn()
     pr.disable()
+    pr.dump_stats(stats_path)
+
     buf = io.StringIO()
     pstats.Stats(pr, stream=buf).sort_stats("cumulative").print_stats(top_n)
 
@@ -107,6 +115,8 @@ def profile_fn(name, fn, out_path, top_n=20):
         f"=== {name} ===\n"
         f"output shape:    {output_shape(result)}\n"
         f"output bytes:    {out_b/1e6:.2f} MB\n\n"
+        f"pstats file:     {stats_path}\n"
+        f"printed rows:    top {top_n} by cumulative time\n\n"
     )
     out_path.write_text(header + buf.getvalue())
 
@@ -132,9 +142,8 @@ def measure_memory(name, call, n_memory_warmup):
 def time_stages(stage_fns, n_warmup=10, n_timed=30):
     """Time a pipeline broken into named stages, called sequentially each pass.
 
-    stage_fns: dict[str, Callable[[], Any]] — ordered; each callable runs one stage.
-      Stages share state via closures and must be called in insertion order each pass.
-    Returns: dict[str, float] — stage_name → median ms.
+    stage_fns: ordered mapping of stage name to callable. Stages share state
+    via closures and must be called in insertion order each pass.
     """
     stages = list(stage_fns.items())
     for _ in range(n_warmup):
@@ -157,30 +166,61 @@ def time_stages(stage_fns, n_warmup=10, n_timed=30):
     }
 
 
-def parse_cprofile_stages(profile_path, stage_keywords):
-    """Parse a cProfile file written by profile_fn and extract per-stage cumtime.
+def time_stage_pipeline(stage_fns, n_warmup=10, n_timed=30):
+    """Time the whole ordered stage pipeline end-to-end.
 
-    profile_path: Path to file written by profile_fn().
-    stage_keywords: dict[str, list[str]] — stage_name → substrings to match in
-      the function name column (case-insensitive). First match in cumtime-sorted
-      table wins.
-
-    Returns: dict[str, float | None] with one entry per stage_name (None if no
-      keyword matched) plus a special "_total_ms" key for the overall wall time
-      parsed from the cProfile summary line.
-
-    Raises FileNotFoundError if profile_path does not exist.
+    This sanity-checks time_stages(): the sum of stage medians should be close
+    to, but not exactly the same as, this full-call median.
     """
+    stages = list(stage_fns.items())
+    for _ in range(n_warmup):
+        for _, fn in stages:
+            fn()
+    gc.collect()
+    gc.disable()
+    try:
+        ts = []
+        for _ in range(n_timed):
+            t0 = time.perf_counter_ns()
+            for _, fn in stages:
+                fn()
+            ts.append(time.perf_counter_ns() - t0)
+    finally:
+        gc.enable()
+    return float(np.median(np.array(ts, dtype=np.float64)) / 1e6)
+
+
+def _parse_total_ms_from_text(profile_path):
     text = profile_path.read_text()
-
-    # Extract overall wall time from "N function calls in T.TTT seconds"
-    total_ms = None
     m = re.search(r"(\d+(?:\.\d+)?)\s+seconds", text)
-    if m:
-        total_ms = float(m.group(1)) * 1000.0
+    return float(m.group(1)) * 1000.0 if m else None
 
-    # Find the column-header line and parse data rows below it
-    rows = []  # list of (cumtime_s, function_name_fragment)
+
+def _load_pstats_rows(profile_path):
+    stats_path = profile_path.with_suffix(profile_path.suffix + ".pstats")
+    if not stats_path.exists():
+        return None, None
+
+    stats_obj = pstats.Stats(str(stats_path))
+    rows = []
+    for (filename, lineno, func_name), (cc, nc, tt, ct, _callers) in stats_obj.stats.items():
+        fragment = f"{filename}:{lineno}({func_name})"
+        rows.append({
+            "func": fragment,
+            "search": fragment.lower(),
+            "ncalls": nc,
+            "primitive_calls": cc,
+            "tottime_ms": float(tt) * 1000.0,
+            "cumtime_ms": float(ct) * 1000.0,
+        })
+    rows.sort(key=lambda r: r["cumtime_ms"], reverse=True)
+    return float(stats_obj.total_tt) * 1000.0, rows
+
+
+def _load_text_rows(profile_path):
+    """Fallback parser for older profile files without a sibling .pstats file."""
+    text = profile_path.read_text()
+    rows = []
     in_table = False
     for line in text.splitlines():
         if re.match(r"\s*ncalls\s+tottime", line):
@@ -192,33 +232,71 @@ def parse_cprofile_stages(profile_path, stage_keywords):
         if not stripped:
             continue
         parts = stripped.split()
-        # Minimum: ncalls tottime percall cumtime percall filename:lineno(function)
         if len(parts) < 6:
             continue
         try:
+            tottime_s = float(parts[1])
             cumtime_s = float(parts[3])
         except ValueError:
             continue
-        # Function name is the last whitespace-separated token
         func_fragment = parts[-1]
-        rows.append((cumtime_s, func_fragment))
+        rows.append({
+            "func": func_fragment,
+            "search": func_fragment.lower(),
+            "ncalls": parts[0],
+            "primitive_calls": None,
+            "tottime_ms": tottime_s * 1000.0,
+            "cumtime_ms": cumtime_s * 1000.0,
+        })
+    return rows
 
-    result = {"_total_ms": total_ms}
+
+def parse_cprofile_stages(profile_path, stage_keywords, metric="cumtime"):
+    """Parse a cProfile file written by profile_fn and extract per-stage time.
+
+    metric is "cumtime" or "tottime". The selected metric is copied to the
+    top-level stage keys; "_matches" keeps both self and cumulative time.
+    """
+    if metric not in ("cumtime", "tottime"):
+        raise ValueError("metric must be 'cumtime' or 'tottime'")
+
+    total_ms, rows = _load_pstats_rows(profile_path)
+    if rows is None:
+        rows = _load_text_rows(profile_path)
+        total_ms = _parse_total_ms_from_text(profile_path)
+
+    metric_key = f"{metric}_ms"
+    result = {"_total_ms": total_ms, "_metric": metric, "_matches": {}}
     for stage, keywords in stage_keywords.items():
         matched = None
-        for cumtime_s, func_fragment in rows:
-            if any(kw.lower() in func_fragment.lower() for kw in keywords):
-                matched = cumtime_s * 1000.0
+        lowered = [kw.lower() for kw in keywords]
+        for row in rows:
+            if any(kw in row["search"] for kw in lowered):
+                matched = row
                 break
-        result[stage] = matched
+        if matched is None:
+            result[stage] = None
+            result["_matches"][stage] = None
+        else:
+            result[stage] = matched[metric_key]
+            result["_matches"][stage] = {
+                "func": matched["func"],
+                "ncalls": matched["ncalls"],
+                "tottime_ms": matched["tottime_ms"],
+                "cumtime_ms": matched["cumtime_ms"],
+            }
     return result
 
 
 def env_info():
-    import os
     import PIL
     import torchvision
     import transformers
+    try:
+        import numba
+        numba_threads = numba.get_num_threads()
+    except Exception:
+        numba_threads = "?"
     return (
         f"python={platform.python_version()} platform={platform.platform()}\n"
         f"cpu={platform.processor() or platform.machine()}\n"
@@ -227,5 +305,8 @@ def env_info():
         f"numpy={np.__version__}\n"
         f"OMP_NUM_THREADS={os.environ.get('OMP_NUM_THREADS')} "
         f"MKL_NUM_THREADS={os.environ.get('MKL_NUM_THREADS')} "
-        f"torch_threads={torch.get_num_threads()}"
+        f"OPENBLAS_NUM_THREADS={os.environ.get('OPENBLAS_NUM_THREADS')} "
+        f"NUMBA_NUM_THREADS={os.environ.get('NUMBA_NUM_THREADS')} "
+        f"torch_threads={torch.get_num_threads()} "
+        f"numba_threads={numba_threads}"
     )
