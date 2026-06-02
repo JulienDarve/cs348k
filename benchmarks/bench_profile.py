@@ -71,8 +71,9 @@ from transformers.image_utils import PILImageResampling
 # ---------------------------------------------------------------------------
 
 N_WARMUP_CPROFILE = 3
-N_WARMUP_STAGE    = 10
-N_TIMED_STAGE     = 30
+N_WARMUP_STAGE    = 3
+N_TIMED_STAGE     = 5
+N_TIMED_STAGE_W4  = 2   # W4 passes take ~1s each; 5 is enough for a stable median
 DEFAULT_PROFILES_DIR = Path("profiles")
 
 QWEN_CPROFILE_VARIANTS = ["hf_fast", "hf_bilinear", "dsl_v1", "dsl_v2", "dsl_v3"]
@@ -535,8 +536,10 @@ def main():
     ap.add_argument("--profiles-dir", type=Path, default=DEFAULT_PROFILES_DIR)
     ap.add_argument("--n-warmup",       type=int, default=N_WARMUP_CPROFILE,
                     help="Warmup calls before each cProfile run (default: 3).")
-    ap.add_argument("--n-warmup-stage", type=int, default=N_WARMUP_STAGE)
-    ap.add_argument("--n-timed-stage",  type=int, default=N_TIMED_STAGE)
+    ap.add_argument("--n-warmup-stage",    type=int, default=N_WARMUP_STAGE)
+    ap.add_argument("--n-timed-stage",     type=int, default=N_TIMED_STAGE)
+    ap.add_argument("--n-timed-stage-w4",  type=int, default=N_TIMED_STAGE_W4,
+                    help="Timed stage iterations for W4 (default: 5).")
     ap.add_argument("--cprofile-only",  action="store_true", help="Skip stage timing.")
     ap.add_argument("--stage-only",     action="store_true", help="Skip cProfile.")
     args = ap.parse_args()
@@ -672,9 +675,10 @@ def main():
         # Phase 2: Stage timing
         stage_results = {}
         if not args.cprofile_only and stage_variant_fns:
+            n_timed = args.n_timed_stage_w4 if label == "W4" else args.n_timed_stage
             stage_results = run_stage_workload(
                 label, stage_variant_fns,
-                n_warmup=args.n_warmup_stage, n_timed=args.n_timed_stage,
+                n_warmup=args.n_warmup_stage, n_timed=n_timed,
             )
 
         # Parse cProfile files and print table
