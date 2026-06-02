@@ -106,15 +106,37 @@ Contains Python scripts for creating visualizations from the output data.
 
 - `final_qwen_multithread_speedup.png`: Shows 8-thread Qwen runtime speedups over HF Fast for HF, hand-written, and DSL implementations.
 
+- `final_qwen_singlethread_speedup.png`: Shows single-thread Qwen runtime speedups over HF Fast for HF, hand-written, and DSL implementations.
+
 - `final_qwen_thread_scaling.png`: Shows Qwen 1-thread to 8-thread scaling for HF Fast, hand v3, and DSL v3.
 
 - `final_qwen_dsl_schedule_ablation.png`: Shows single-thread and 8-thread DSL v1/v2/v3 schedule speedups over DSL v1.
 
+- `final_qwen_dsl_schedule_ablation_single_thread.png`: Shows single-thread Qwen DSL v1/v2/v3 schedule speedups over DSL v1.
+
+- `final_qwen_dsl_schedule_ablation_multi_thread.png`: Shows 8-thread Qwen DSL v1/v2/v3 schedule speedups over DSL v1.
+
 - `final_qwen_runtime_memory_pareto.png`: Shows the 8-thread Qwen runtime versus peak/output memory Pareto frontier.
+
+- `final_hf_fast_pipeline_runtime_multithread.png`: Shows multi-thread HF Fast runtime per image across Qwen, InternVL, and LLaVA.
+
+- `final_hf_fast_pipeline_memory_multithread.png`: Shows multi-thread HF Fast peak/output memory across Qwen, InternVL, and LLaVA.
 
 - `final_hf_fast_memory_overhead.png`: Shows multi-thread HF Fast peak/output memory overhead across Qwen, InternVL, and LLaVA.
 
 - `final_hf_fast_thread_scaling.png`: Shows HF Fast 1-thread to 8-thread scaling across Qwen, InternVL, and LLaVA.
+
+- `final_w2_runtime_legacy_fast_threads.png`: Shows W2 legacy versus fast runtime for single-thread and 8-thread HF implementations across model families.
+
+- `final_w3_runtime_legacy_fast_threads.png`: Shows W3 legacy versus fast runtime for single-thread and 8-thread HF implementations across model families.
+
+- `final_w4_runtime_legacy_fast_threads.png`: Shows W4 legacy versus fast runtime for single-thread and 8-thread HF implementations across model families.
+
+- `final_w2_memory_legacy_fast_threads.png`: Shows W2 legacy versus fast peak/output memory for single-thread and 8-thread HF implementations across model families.
+
+- `final_w3_memory_legacy_fast_threads.png`: Shows W3 legacy versus fast peak/output memory for single-thread and 8-thread HF implementations across model families.
+
+- `final_w4_memory_legacy_fast_threads.png`: Shows W4 legacy versus fast peak/output memory for single-thread and 8-thread HF implementations across model families.
 
 ### `results/` 
 Notes about intermediate results

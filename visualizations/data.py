@@ -94,8 +94,8 @@ def _peak_output(row: BenchmarkRow) -> float:
     return row.peak_output
 
 
-def get_qwen_multithread_headline() -> dict[str, object]:
-    results = load_markdown_results("results/aws/bench_dsl_results_multi_thread.md")
+def _get_qwen_headline(relative_path: str) -> dict[str, object]:
+    results = load_markdown_results(relative_path)
     model_order = ["hf_legacy", "hf_fast", "hf_bilinear", "v3", "dsl_v3"]
     labels = {
         "hf_legacy": "HF Legacy",
@@ -112,6 +112,14 @@ def get_qwen_multithread_headline() -> dict[str, object]:
             values[labels[model]].append(baseline / _batch_ms(_must_get(results, workload, model)))
 
     return {"workloads": WORKLOADS, "series": values}
+
+
+def get_qwen_singlethread_headline() -> dict[str, object]:
+    return _get_qwen_headline("results/aws/bench_dsl_results_single_thread.md")
+
+
+def get_qwen_multithread_headline() -> dict[str, object]:
+    return _get_qwen_headline("results/aws/bench_dsl_results_multi_thread.md")
 
 
 def get_qwen_thread_scaling() -> dict[str, object]:
@@ -149,6 +157,16 @@ def get_qwen_dsl_schedule_ablation() -> dict[str, object]:
         panels[panel] = panel_values
 
     return {"workloads": WORKLOADS, "panels": panels}
+
+
+def get_qwen_dsl_schedule_ablation_single_thread() -> dict[str, object]:
+    data = get_qwen_dsl_schedule_ablation()
+    return {"workloads": data["workloads"], "series": data["panels"]["Single thread"]}
+
+
+def get_qwen_dsl_schedule_ablation_multi_thread() -> dict[str, object]:
+    data = get_qwen_dsl_schedule_ablation()
+    return {"workloads": data["workloads"], "series": data["panels"]["8 threads"]}
 
 
 def get_qwen_runtime_memory_pareto() -> dict[str, list[dict[str, float | str]]]:
@@ -190,6 +208,69 @@ def get_hf_fast_memory_heatmap() -> dict[str, object]:
         for model in models
     ]
     return {"workloads": WORKLOADS, "models": model_labels, "values": values}
+
+
+def _full_benchmark_path(thread_label: str) -> str:
+    if thread_label == "single":
+        return "results/aws/full_benchmarks_single_thread_results.md"
+    if thread_label == "multi":
+        return "results/aws/full_benchmarks_multi_thread_results.md"
+    raise ValueError(f"Unknown thread label: {thread_label}")
+
+
+def get_hf_fast_pipeline_runtime(thread_label: str = "multi") -> dict[str, object]:
+    results = load_markdown_results(_full_benchmark_path(thread_label))
+    models = ["Qwen Fast", "InternVL3.5 Fast", "LLaVA Fast"]
+    model_labels = ["Qwen2.5-VL Fast", "InternVL3.5 Fast", "LLaVA-NeXT Fast"]
+    values = {
+        label: [_img_ms(_must_get(results, workload, model)) for workload in WORKLOADS]
+        for model, label in zip(models, model_labels)
+    }
+    return {"workloads": WORKLOADS, "series": values}
+
+
+def get_hf_fast_pipeline_memory(thread_label: str = "multi") -> dict[str, object]:
+    results = load_markdown_results(_full_benchmark_path(thread_label))
+    models = ["Qwen Fast", "InternVL3.5 Fast", "LLaVA Fast"]
+    model_labels = ["Qwen2.5-VL Fast", "InternVL3.5 Fast", "LLaVA-NeXT Fast"]
+    values = {
+        label: [_peak_output(_must_get(results, workload, model)) for workload in WORKLOADS]
+        for model, label in zip(models, model_labels)
+    }
+    return {"workloads": WORKLOADS, "series": values}
+
+
+def get_legacy_fast_thread_comparison(workload: str, metric: str = "runtime") -> dict[str, object]:
+    single = load_markdown_results("results/aws/full_benchmarks_single_thread_results.md")
+    multi = load_markdown_results("results/aws/full_benchmarks_multi_thread_results.md")
+    models = {
+        "Qwen2.5-VL": ("Qwen Legacy", "Qwen Fast"),
+        "InternVL3.5": ("InternVL3.5 Legacy", "InternVL3.5 Fast"),
+        "LLaVA-NeXT": ("LLaVA Legacy", "LLaVA Fast"),
+    }
+    series = {
+        "Legacy 1T": [],
+        "Fast 1T": [],
+        "Legacy 8T": [],
+        "Fast 8T": [],
+    }
+
+    for legacy_name, fast_name in models.values():
+        rows = {
+            "Legacy 1T": _must_get(single, workload, legacy_name),
+            "Fast 1T": _must_get(single, workload, fast_name),
+            "Legacy 8T": _must_get(multi, workload, legacy_name),
+            "Fast 8T": _must_get(multi, workload, fast_name),
+        }
+        for label, row in rows.items():
+            if metric == "runtime":
+                series[label].append(_img_ms(row))
+            elif metric == "memory":
+                series[label].append(_peak_output(row))
+            else:
+                raise ValueError(f"Unknown metric: {metric}")
+
+    return {"workload": workload, "models": tuple(models.keys()), "series": series}
 
 
 def get_hf_fast_thread_scaling_heatmap() -> dict[str, object]:
