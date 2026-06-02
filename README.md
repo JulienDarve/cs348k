@@ -30,9 +30,7 @@ Please go to `MILESTONE_2.md` for the write up and results for Milestone 2!
 
 - `MILESTONE_2.md` Report for Milestone 2
 
-- `MILESTONE_2_AWS_CHARTS.md` Recreates the Milestone 2 markdown charts using only the AWS result tables.
-
-- `MILESTONE_2_AWS_BATCH_DSL_CHART.md` Compares attached AWS batch DSL runtime and memory results against the multi-thread Hugging Face Qwen baselines.
+- `FINAL_RESULTS.md` Final results for the project
 
 - `pyproject.toml` `poetry.lock` Poetry dependancy management
 
@@ -198,6 +196,8 @@ Per-model DSL pipelines (algorithm DAG + named `Schedule`s).
 - `test_dsl_correctness.py`: D3 spine gate — verifies `classify_fusion` matches v1/v2/v3, DSL-v1/v2/v3 reproduce the hand-fused Qwen kernels, DSL-v3 matches hand-v3 within 1e-7, and all three DSL schedules produce equivalent output.
 
 - `test_dsl_llava_correctness.py`: D4 gate — verifies `classify_fusion_llava`, DSL LLaVA output shape, cross-schedule consistency, and pixel values vs HF bilinear within atol=0.05.
+
+- `test_filter_comparison.py`: Informational (no gate) — prints a max_diff table for DSL-v1 (LLaVA) and Qwen v1 kernel against HF slow/fast processors with both BICUBIC and BILINEAR filters.
 
 
 ## Project Proposal
