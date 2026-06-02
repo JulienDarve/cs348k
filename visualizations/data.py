@@ -39,9 +39,7 @@ def _parse_numeric_cell(cell: str) -> float | None:
     return float(match.group(0))
 
 
-def _parse_final_results_heading(line: str) -> tuple[str, str] | None:
-    if "Four-Threaded" in line:
-        return None
+def _parse_final_results_heading(line: str, current_family: str | None) -> tuple[str, str, str] | None:
     if "Runtime" in line:
         metric = "runtime"
     elif "Memory" in line:
@@ -49,8 +47,23 @@ def _parse_final_results_heading(line: str) -> tuple[str, str] | None:
     else:
         return None
 
-    thread = "single" if "Single-Threaded" in line else "multi"
-    return thread, metric
+    if "Single-Threaded" in line:
+        thread = "single"
+    elif "Four-Threaded" in line:
+        thread = "four"
+    else:
+        thread = "multi"
+
+    if "LLaVA" in line:
+        family = "llava"
+    elif "Qwen" in line:
+        family = "qwen"
+    else:
+        family = current_family
+    if family is None:
+        return None
+
+    return family, thread, metric
 
 
 @lru_cache(maxsize=1)
@@ -76,8 +89,7 @@ def load_final_results() -> dict[tuple[str, str, str], dict[str, dict[str, float
             i += 1
             continue
         if line.startswith("### Chart ") and family is not None:
-            heading = _parse_final_results_heading(line)
-            pending_key = (family, *heading) if heading is not None else None
+            pending_key = _parse_final_results_heading(line, family)
             i += 1
             continue
 
@@ -109,7 +121,7 @@ def load_final_results() -> dict[tuple[str, str, str], dict[str, dict[str, float
     expected = {
         (family_name, thread, metric)
         for family_name in ("qwen", "llava")
-        for thread in ("multi", "single")
+        for thread in ("multi", "single", "four")
         for metric in ("runtime", "memory")
     }
     missing = expected.difference(tables)
@@ -131,6 +143,99 @@ def get_final_grouped_bar_data(family: str, thread: str, metric: str) -> dict[st
         "metric": metric,
         "workloads": WORKLOADS,
         "series": series,
+    }
+
+
+def get_final_selected_grouped_data(
+    family: str,
+    thread: str,
+    metric: str,
+    methods: tuple[str, ...],
+) -> dict[str, object]:
+    tables = load_final_results()
+    rows = tables[(family, thread, metric)]
+    series = {
+        FINAL_METHOD_LABELS[method]: [rows[workload][method] for workload in WORKLOADS]
+        for method in methods
+    }
+    return {
+        "family": family,
+        "thread": thread,
+        "metric": metric,
+        "workloads": WORKLOADS,
+        "series": series,
+    }
+
+
+def get_qwen_w4_thread_scaling() -> dict[str, object]:
+    tables = load_final_results()
+    thread_keys = ("single", "four", "multi")
+    thread_labels = ("1T", "4T", "8T")
+    methods = ("hf_bilinear", "dsl_v3")
+    series = {}
+    speedups = {}
+
+    for method in methods:
+        label = FINAL_METHOD_LABELS[method]
+        values = [
+            tables[("qwen", thread, "runtime")]["W4"][method]
+            for thread in thread_keys
+        ]
+        series[label] = values
+        speedups[label] = values[0] / values[-1]
+
+    return {
+        "workload": "W4",
+        "threads": thread_labels,
+        "series": series,
+        "speedups": speedups,
+    }
+
+
+def get_qwen_w4_schedule_axes() -> dict[str, object]:
+    tables = load_final_results()
+    variants = ("dsl_v1", "dsl_v2", "dsl_v3")
+    variant_labels = ("v1", "v2", "v3")
+    runtime_rows = tables[("qwen", "multi", "runtime")]["W4"]
+    memory_rows = tables[("qwen", "multi", "memory")]["W4"]
+    fusion_runtime = [runtime_rows[variant] for variant in variants]
+    fusion_memory = [memory_rows[variant] for variant in variants]
+    parallel_runtime = [
+        tables[("qwen", "single", "runtime")]["W4"]["dsl_v3"],
+        tables[("qwen", "multi", "runtime")]["W4"]["dsl_v3"],
+    ]
+
+    return {
+        "workload": "W4",
+        "variant_labels": variant_labels,
+        "fusion_runtime": fusion_runtime,
+        "fusion_memory": fusion_memory,
+        "runtime_spread": max(fusion_runtime) / min(fusion_runtime),
+        "parallel_threads": ("1T", "8T"),
+        "parallel_runtime": parallel_runtime,
+        "parallel_speedup": parallel_runtime[0] / parallel_runtime[-1],
+    }
+
+
+def get_llava_singlethread_memory_floor_summary() -> dict[str, float]:
+    rows = load_final_results()[("llava", "single", "memory")]
+    dsl_methods = ("dsl_v1", "dsl_v2", "dsl_v3")
+    hf_methods = ("hf_legacy", "hf_fast", "hf_bilinear")
+    dsl_values = [
+        rows[workload][method]
+        for workload in WORKLOADS
+        for method in dsl_methods
+    ]
+    hf_values = [
+        rows[workload][method]
+        for workload in WORKLOADS
+        for method in hf_methods
+    ]
+    return {
+        "dsl_min": min(dsl_values),
+        "dsl_max": max(dsl_values),
+        "hf_min": min(hf_values),
+        "hf_max": max(hf_values),
     }
 
 

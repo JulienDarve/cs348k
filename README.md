@@ -105,6 +105,10 @@ Contains Python scripts for creating visualizations from the output data.
 
 - `final_results_gallery.md`: Links the final generated Qwen and LLaVA result figures.
 
+- `final_slide_figures.py`: Creates the data-backed final presentation figures requested for slides 5 through 8 from `FINAL_RESULTS.md`.
+
+- `final_slide_figures.md`: Links the generated data-backed final presentation figures for slides 5 through 8.
+
 #### `visualizations/figures/`
 
 - `final_qwen_multithread_runtime.png`: Shows 8-thread Qwen runtime per image for HF and DSL implementations.
@@ -124,6 +128,16 @@ Contains Python scripts for creating visualizations from the output data.
 - `final_llava_singlethread_memory.png`: Shows single-thread LLaVA-NeXT peak/output RSS memory for HF and DSL implementations.
 
 - `final_runtime_memory_pareto.png`: Shows runtime versus peak/output RSS memory Pareto frontiers for Qwen and LLaVA-NeXT across thread settings and workloads.
+
+- `slide_5_qwen_memory_floor.png`: Shows Qwen 8-thread peak/output RSS memory for HF baselines and DSL v3 with the output-floor reference line.
+
+- `slide_5_llava_singlethread_memory_floor.png`: Shows LLaVA-NeXT single-thread peak/output RSS memory for HF baselines and DSL v3 with the output-floor reference line.
+
+- `slide_6_qwen_w4_thread_scaling.png`: Shows Qwen W4 runtime scaling for HF bilinear and DSL v3 across 1, 4, and 8 threads.
+
+- `slide_7_qwen_schedule_axes.png`: Shows Qwen W4 fusion-axis memory/runtime behavior across DSL schedule variants.
+
+- `slide_8_llava_schedule_flat_runtime.png`: Shows LLaVA-NeXT 8-thread runtime for HF bilinear and DSL schedules, plus the single-thread memory-floor summary.
 
 ### `results/` 
 Notes about intermediate results
