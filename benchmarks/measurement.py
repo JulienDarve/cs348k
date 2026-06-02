@@ -3,6 +3,7 @@ import gc
 import io
 import platform
 import pstats
+import re
 import resource
 import threading
 import time
@@ -126,6 +127,91 @@ def measure_memory(name, call, n_memory_warmup):
     print(f"  peak RSS:      {peak_rss/1e6:.2f} MB")
     print(f"  peak / output: {ratio:.2f}x")
     return ratio
+
+
+def time_stages(stage_fns, n_warmup=10, n_timed=30):
+    """Time a pipeline broken into named stages, called sequentially each pass.
+
+    stage_fns: dict[str, Callable[[], Any]] — ordered; each callable runs one stage.
+      Stages share state via closures and must be called in insertion order each pass.
+    Returns: dict[str, float] — stage_name → median ms.
+    """
+    stages = list(stage_fns.items())
+    for _ in range(n_warmup):
+        for _, fn in stages:
+            fn()
+    gc.collect()
+    gc.disable()
+    try:
+        ns_per_stage = {name: [] for name, _ in stages}
+        for _ in range(n_timed):
+            for name, fn in stages:
+                t0 = time.perf_counter_ns()
+                fn()
+                ns_per_stage[name].append(time.perf_counter_ns() - t0)
+    finally:
+        gc.enable()
+    return {
+        name: float(np.median(np.array(ns, dtype=np.float64)) / 1e6)
+        for name, ns in ns_per_stage.items()
+    }
+
+
+def parse_cprofile_stages(profile_path, stage_keywords):
+    """Parse a cProfile file written by profile_fn and extract per-stage cumtime.
+
+    profile_path: Path to file written by profile_fn().
+    stage_keywords: dict[str, list[str]] — stage_name → substrings to match in
+      the function name column (case-insensitive). First match in cumtime-sorted
+      table wins.
+
+    Returns: dict[str, float | None] with one entry per stage_name (None if no
+      keyword matched) plus a special "_total_ms" key for the overall wall time
+      parsed from the cProfile summary line.
+
+    Raises FileNotFoundError if profile_path does not exist.
+    """
+    text = profile_path.read_text()
+
+    # Extract overall wall time from "N function calls in T.TTT seconds"
+    total_ms = None
+    m = re.search(r"(\d+(?:\.\d+)?)\s+seconds", text)
+    if m:
+        total_ms = float(m.group(1)) * 1000.0
+
+    # Find the column-header line and parse data rows below it
+    rows = []  # list of (cumtime_s, function_name_fragment)
+    in_table = False
+    for line in text.splitlines():
+        if re.match(r"\s*ncalls\s+tottime", line):
+            in_table = True
+            continue
+        if not in_table:
+            continue
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split()
+        # Minimum: ncalls tottime percall cumtime percall filename:lineno(function)
+        if len(parts) < 6:
+            continue
+        try:
+            cumtime_s = float(parts[3])
+        except ValueError:
+            continue
+        # Function name is the last whitespace-separated token
+        func_fragment = parts[-1]
+        rows.append((cumtime_s, func_fragment))
+
+    result = {"_total_ms": total_ms}
+    for stage, keywords in stage_keywords.items():
+        matched = None
+        for cumtime_s, func_fragment in rows:
+            if any(kw.lower() in func_fragment.lower() for kw in keywords):
+                matched = cumtime_s * 1000.0
+                break
+        result[stage] = matched
+    return result
 
 
 def env_info():

@@ -41,6 +41,7 @@ Benchmarks existing implementations (Milestone 1)
 - `bench_kernels.py`: Benchmarks the Milestone 2 Qwen kernel implementations against HF legacy, HF fast, and HF bilinear baselines.
 - `bench_dsl.py`: Extends bench_kernels.py with DSL-compiled variants (dsl_v1/v2/v3) built via dsl/codegen.py to benchmark the DSL ablation alongside hand-written kernels and HF baselines.
 - `bench_dsl_llava.py`: Benchmarks LLaVA-NeXT DSL variants (dsl_v1/v2/v3) against HF legacy/fast on W2/W3/W4 workloads; no hand-tuned kernels.
+- `bench_profile.py`: cProfile breakdown for HF variants and per-stage wall-clock timing for DSL Numba kernels; outputs profiles/ files and a side-by-side comparison table.
 
 - `full_benchmark.py`: Runs the full benchmark for n threads
 
@@ -98,47 +99,31 @@ Contains Python scripts for creating visualizations from the output data.
 
 - `milestone_2_runtime_memory_pareto.py`: Creates a runtime versus peak/output memory Pareto chart for the Milestone 2 Qwen kernels.
 
-- `data.py`: Parses AWS benchmark result markdown tables and prepares derived plotting data for final-result visualizations.
+- `data.py`: Parses AWS benchmark result markdown tables and `FINAL_RESULTS.md`, then prepares derived plotting data for visualizations.
 
-- `final_results_charts.py`: Creates final presentation charts for Qwen DSL speedups, thread scaling, schedule ablations, runtime/memory Pareto, and HF Fast baseline context.
+- `final_results_charts.py`: Creates final Qwen and LLaVA runtime, peak-memory, and runtime/memory Pareto charts from `FINAL_RESULTS.md`.
 
-- `final_results_gallery.md`: Links the final generated figures with short presentation captions.
+- `final_results_gallery.md`: Links the final generated Qwen and LLaVA result figures.
 
 #### `visualizations/figures/`
 
-- `final_qwen_multithread_speedup.png`: Shows 8-thread Qwen runtime speedups over HF Fast for HF, hand-written, and DSL implementations.
+- `final_qwen_multithread_runtime.png`: Shows 8-thread Qwen runtime per image for HF and DSL implementations.
 
-- `final_qwen_singlethread_speedup.png`: Shows single-thread Qwen runtime speedups over HF Fast for HF, hand-written, and DSL implementations.
+- `final_llava_multithread_runtime.png`: Shows 8-thread LLaVA-NeXT runtime per image for HF and DSL implementations.
 
-- `final_qwen_thread_scaling.png`: Shows Qwen 1-thread to 8-thread scaling for HF Legacy, HF Fast, hand v3, and DSL v3.
+- `final_qwen_multithread_memory.png`: Shows 8-thread Qwen peak/output RSS memory for HF and DSL implementations.
 
-- `final_qwen_dsl_schedule_ablation.png`: Shows single-thread and 8-thread DSL v1/v2/v3 schedule speedups over DSL v1.
+- `final_llava_multithread_memory.png`: Shows 8-thread LLaVA-NeXT peak/output RSS memory for HF and DSL implementations.
 
-- `final_qwen_dsl_schedule_ablation_single_thread.png`: Shows single-thread Qwen DSL v1/v2/v3 schedule speedups over DSL v1.
+- `final_qwen_singlethread_runtime.png`: Shows single-thread Qwen runtime per image for HF and DSL implementations.
 
-- `final_qwen_dsl_schedule_ablation_multi_thread.png`: Shows 8-thread Qwen DSL v1/v2/v3 schedule speedups over DSL v1.
+- `final_llava_singlethread_runtime.png`: Shows single-thread LLaVA-NeXT runtime per image for HF and DSL implementations.
 
-- `final_qwen_runtime_memory_pareto.png`: Shows the 8-thread Qwen runtime versus peak/output memory Pareto frontier.
+- `final_qwen_singlethread_memory.png`: Shows single-thread Qwen peak/output RSS memory for HF and DSL implementations.
 
-- `final_hf_fast_pipeline_runtime_multithread.png`: Shows multi-thread HF Fast runtime per image across Qwen, InternVL, and LLaVA.
+- `final_llava_singlethread_memory.png`: Shows single-thread LLaVA-NeXT peak/output RSS memory for HF and DSL implementations.
 
-- `final_hf_fast_pipeline_memory_multithread.png`: Shows multi-thread HF Fast peak/output memory across Qwen, InternVL, and LLaVA.
-
-- `final_hf_fast_memory_overhead.png`: Shows multi-thread HF Fast peak/output memory overhead across Qwen, InternVL, and LLaVA.
-
-- `final_hf_fast_thread_scaling.png`: Shows HF Fast 1-thread to 8-thread scaling across Qwen, InternVL, and LLaVA.
-
-- `final_w2_runtime_legacy_fast_threads.png`: Shows W2 legacy versus fast runtime for single-thread and 8-thread HF implementations across model families.
-
-- `final_w3_runtime_legacy_fast_threads.png`: Shows W3 legacy versus fast runtime for single-thread and 8-thread HF implementations across model families.
-
-- `final_w4_runtime_legacy_fast_threads.png`: Shows W4 legacy versus fast runtime for single-thread and 8-thread HF implementations across model families.
-
-- `final_w2_memory_legacy_fast_threads.png`: Shows W2 legacy versus fast peak/output memory for single-thread and 8-thread HF implementations across model families.
-
-- `final_w3_memory_legacy_fast_threads.png`: Shows W3 legacy versus fast peak/output memory for single-thread and 8-thread HF implementations across model families.
-
-- `final_w4_memory_legacy_fast_threads.png`: Shows W4 legacy versus fast peak/output memory for single-thread and 8-thread HF implementations across model families.
+- `final_runtime_memory_pareto.png`: Shows runtime versus peak/output RSS memory Pareto frontiers for Qwen and LLaVA-NeXT across thread settings and workloads.
 
 ### `results/` 
 Notes about intermediate results
