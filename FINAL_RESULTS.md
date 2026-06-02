@@ -5,6 +5,7 @@ These tables compare the attached AWS `c7i.4xlarge` batch DSL results against Hu
 Sources:
 - Hugging Face rows: `results/aws/bench_dsl_results_multi_thread.md`
 - DSL rows: attached output from `benchmarks/bench_dsl.py --num-threads 8 --variants dsl_v1 dsl_v2 dsl_v3`
+- Qwen single-thread rows: attached output from `benchmarks/bench_dsl.py --variants dsl_v1 dsl_v2 dsl_v3 hf_legacy hf_fast hf_bilinear --num-threads 1`
 - LLaVA rows: attached output from `benchmarks/bench_dsl_llava.py --num-threads 8`, `benchmarks/bench_dsl_llava.py --variants hf_bilinear --num-threads 8`, `benchmarks/bench_dsl_llava.py --num-threads 1`, and `benchmarks/bench_dsl_llava.py --variants hf_bilinear --num-threads 1`
 
 ## Qwen Results
@@ -29,9 +30,29 @@ Peak / Output RSS memory usage with `--num-threads 8` on AWS `c7i.4xlarge`. Best
 | W3 | 1.99x | 2.28x | 2.32x | 1.07x | **1.00x** | **1.00x** |
 | W4 | 2.02x | 3.86x | 3.84x | 1.88x | 1.83x | **1.13x** |
 
+### Chart 3: Single-Threaded Runtime
+
+Median runtime in ms/img with `--num-threads 1` on AWS `c7i.4xlarge`. Best model per workload is bolded.
+
+| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
+|---|---:|---:|---:|---:|---:|---:|
+| W2 | **64.076** | 74.576 | 74.271 | 108.374 | 102.418 | 121.225 |
+| W3 | 23.522 | **19.815** | 19.871 | 43.902 | 41.215 | 48.748 |
+| W4 | 729.148 | 640.630 | **637.793** | 1070.222 | 953.593 | 994.205 |
+
+### Chart 4: Single-Threaded Peak Memory Allocation
+
+Peak / Output RSS memory usage with `--num-threads 1` on AWS `c7i.4xlarge`. Best model per workload is bolded.
+
+| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
+|---|---:|---:|---:|---:|---:|---:|
+| W2 | 2.08x | 3.88x | 3.76x | **1.00x** | **1.00x** | **1.00x** |
+| W3 | 1.91x | 2.30x | 2.31x | 1.00x | **0.77x** | 1.00x |
+| W4 | 2.02x | 3.84x | 3.84x | 1.20x | 1.20x | **1.08x** |
+
 ## LLaVA Results
 
-### Chart 3: LLaVA Multi-Threaded Runtime
+### Chart 5: LLaVA Multi-Threaded Runtime
 
 Median runtime in ms/img with `--num-threads 8` on AWS `c7i.4xlarge`. Best model per workload is bolded.
 
@@ -41,7 +62,7 @@ Median runtime in ms/img with `--num-threads 8` on AWS `c7i.4xlarge`. Best model
 | W3 | 23.631 | 4.314 | 4.195 | 3.686 | **3.602** | 3.646 |
 | W4 | 156.707 | 28.836 | **26.220** | 44.341 | 44.293 | 44.528 |
 
-### Chart 4: LLaVA Peak Memory Allocation
+### Chart 6: LLaVA Peak Memory Allocation
 
 Peak / Output RSS memory usage with `--num-threads 8` on AWS `c7i.4xlarge`. Best model per workload is bolded.
 
@@ -51,7 +72,7 @@ Peak / Output RSS memory usage with `--num-threads 8` on AWS `c7i.4xlarge`. Best
 | W3 | 1.84x | 1.97x | 2.49x | **1.00x** | **1.00x** | **1.00x** |
 | W4 | 3.89x | 4.26x | 3.92x | **2.44x** | **2.44x** | **2.44x** |
 
-### Chart 5: LLaVA Single-Threaded Runtime
+### Chart 7: LLaVA Single-Threaded Runtime
 
 Median runtime in ms/img with `--num-threads 1` on AWS `c7i.4xlarge`. Best model per workload is bolded.
 
@@ -61,7 +82,7 @@ Median runtime in ms/img with `--num-threads 1` on AWS `c7i.4xlarge`. Best model
 | W3 | 23.254 | 12.006 | **11.946** | 22.405 | 21.771 | 22.033 |
 | W4 | 157.016 | 36.490 | **33.912** | 252.443 | 251.881 | 251.332 |
 
-### Chart 6: LLaVA Single-Threaded Peak Memory Allocation
+### Chart 8: LLaVA Single-Threaded Peak Memory Allocation
 
 Peak / Output RSS memory usage with `--num-threads 1` on AWS `c7i.4xlarge`. Best model per workload is bolded.
 
