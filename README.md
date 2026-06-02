@@ -30,6 +30,8 @@ Please go to `MILESTONE_2.md` for the write up and results for Milestone 2!
 
 - `MILESTONE_2.md` Report for Milestone 2
 
+- `MILESTONE_2_AWS_CHARTS.md` Recreates the Milestone 2 markdown charts using only the AWS result tables.
+
 - `pyproject.toml` `poetry.lock` Poetry dependancy management
 
 ### `benchmarks/`

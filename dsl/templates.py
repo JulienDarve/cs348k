@@ -441,7 +441,8 @@ def make_template_llava_full(parallel_tiles: bool):
     → None kernel.
 
     Mirrors LLaVA v3: zero intermediates. For each output tile, directly
-    bilinear-samples from the original uint8 image using composed coordinates,
+    samples from the original uint8 image using composed coordinates with the
+    Pillow-compatible BILINEAR filter (scaled triangle, floor/ceil range bounds),
     then writes rescaled+normalized values to the preallocated CHW output.
 
     tile_descs: (N_total, 10) int64 —
@@ -452,6 +453,7 @@ def make_template_llava_full(parallel_tiles: bool):
         the center-padding offsets that place the resized content inside best_res.
 
     For grid tiles, pixels in the zero-padded border write (-mean/std) directly.
+    All coordinate and accumulation arithmetic uses float64 to match bilinear_resize.
     """
     if parallel_tiles:
         @njit(parallel=True, cache=True)
@@ -459,25 +461,45 @@ def make_template_llava_full(parallel_tiles: bool):
             n_tiles = np.int64(output.shape[0])
             ts = np.int64(tile_size)
             for t in prange(n_tiles):
-                img      = imgs[img_idx[t]]
-                orig_h_f = np.float32(tile_descs[t, 0])
-                orig_w_f = np.float32(tile_descs[t, 1])
-                t_row    = tile_descs[t, 4]
-                t_col    = tile_descs[t, 5]
-                new_h    = tile_descs[t, 6]
-                new_w    = tile_descs[t, 7]
+                img    = imgs[img_idx[t]]
+                orig_h = tile_descs[t, 0]
+                orig_w = tile_descs[t, 1]
+                t_row  = tile_descs[t, 4]
+                t_col  = tile_descs[t, 5]
+                new_h  = tile_descs[t, 6]
+                new_w  = tile_descs[t, 7]
                 pad_top  = tile_descs[t, 8]
                 pad_left = tile_descs[t, 9]
-                sy = orig_h_f / np.float32(new_h)
-                sx = orig_w_f / np.float32(new_w)
+                sy = np.float64(orig_h) / np.float64(new_h)
+                sx = np.float64(orig_w) / np.float64(new_w)
+                sup_y = max(1.0, sy)
+                sup_x = max(1.0, sx)
+                sc64  = np.float64(scale)
                 if t_row < np.int64(0):  # thumbnail: direct resize
                     for y in range(ts):
+                        cy = (np.float64(y) + 0.5) * sy - 0.5
+                        y_lo = max(np.int64(0), np.int64(math.floor(cy - sup_y)))
+                        y_hi = min(orig_h,       np.int64(math.ceil(cy + sup_y)))
                         for x in range(ts):
-                            src_y = (np.float32(y) + np.float32(0.5)) * sy - np.float32(0.5)
-                            src_x = (np.float32(x) + np.float32(0.5)) * sx - np.float32(0.5)
-                            pixel = bilinear_sample(img, src_x, src_y)
-                            for ch in range(np.int64(3)):
-                                output[t, ch, y, x] = (pixel[ch] * scale - mean[ch]) / std[ch]
+                            cx = (np.float64(x) + 0.5) * sx - 0.5
+                            x_lo = max(np.int64(0), np.int64(math.floor(cx - sup_x)))
+                            x_hi = min(orig_w,       np.int64(math.ceil(cx + sup_x)))
+                            acc0 = acc1 = acc2 = 0.0
+                            tw = 0.0
+                            for si in range(y_lo, y_hi):
+                                wy = max(0.0, 1.0 - abs(np.float64(si) - cy) / sup_y)
+                                for sj in range(x_lo, x_hi):
+                                    wx = max(0.0, 1.0 - abs(np.float64(sj) - cx) / sup_x)
+                                    w_ij = wy * wx
+                                    if w_ij > 0.0:
+                                        acc0 += w_ij * img[si, sj, 0]
+                                        acc1 += w_ij * img[si, sj, 1]
+                                        acc2 += w_ij * img[si, sj, 2]
+                                        tw += w_ij
+                            if tw > 0.0:
+                                output[t, 0, y, x] = (acc0 / tw * sc64 - mean[0]) / std[0]
+                                output[t, 1, y, x] = (acc1 / tw * sc64 - mean[1]) / std[1]
+                                output[t, 2, y, x] = (acc2 / tw * sc64 - mean[2]) / std[2]
                 else:  # grid tile: aspect-preserving resize + zero-pad
                     row_off = t_row * ts
                     col_off = t_col * ts
@@ -485,42 +507,80 @@ def make_template_llava_full(parallel_tiles: bool):
                         for x in range(ts):
                             gy = row_off + np.int64(y)
                             gx = col_off + np.int64(x)
-                            cy = gy - pad_top
-                            cx = gx - pad_left
-                            if cy < np.int64(0) or cy >= new_h or cx < np.int64(0) or cx >= new_w:
-                                for ch in range(np.int64(3)):
-                                    output[t, ch, y, x] = -mean[ch] / std[ch]
+                            cyi = gy - pad_top
+                            cxi = gx - pad_left
+                            if cyi < np.int64(0) or cyi >= new_h or cxi < np.int64(0) or cxi >= new_w:
+                                output[t, 0, y, x] = -mean[0] / std[0]
+                                output[t, 1, y, x] = -mean[1] / std[1]
+                                output[t, 2, y, x] = -mean[2] / std[2]
                             else:
-                                src_y = (np.float32(cy) + np.float32(0.5)) * sy - np.float32(0.5)
-                                src_x = (np.float32(cx) + np.float32(0.5)) * sx - np.float32(0.5)
-                                pixel = bilinear_sample(img, src_x, src_y)
-                                for ch in range(np.int64(3)):
-                                    output[t, ch, y, x] = (pixel[ch] * scale - mean[ch]) / std[ch]
+                                cy = (np.float64(cyi) + 0.5) * sy - 0.5
+                                cx = (np.float64(cxi) + 0.5) * sx - 0.5
+                                y_lo = max(np.int64(0), np.int64(math.floor(cy - sup_y)))
+                                y_hi = min(orig_h,       np.int64(math.ceil(cy + sup_y)))
+                                x_lo = max(np.int64(0), np.int64(math.floor(cx - sup_x)))
+                                x_hi = min(orig_w,       np.int64(math.ceil(cx + sup_x)))
+                                acc0 = acc1 = acc2 = 0.0
+                                tw = 0.0
+                                for si in range(y_lo, y_hi):
+                                    wy = max(0.0, 1.0 - abs(np.float64(si) - cy) / sup_y)
+                                    for sj in range(x_lo, x_hi):
+                                        wx = max(0.0, 1.0 - abs(np.float64(sj) - cx) / sup_x)
+                                        w_ij = wy * wx
+                                        if w_ij > 0.0:
+                                            acc0 += w_ij * img[si, sj, 0]
+                                            acc1 += w_ij * img[si, sj, 1]
+                                            acc2 += w_ij * img[si, sj, 2]
+                                            tw += w_ij
+                                if tw > 0.0:
+                                    output[t, 0, y, x] = (acc0 / tw * sc64 - mean[0]) / std[0]
+                                    output[t, 1, y, x] = (acc1 / tw * sc64 - mean[1]) / std[1]
+                                    output[t, 2, y, x] = (acc2 / tw * sc64 - mean[2]) / std[2]
     else:
         @njit(cache=True)
         def kernel(imgs, tile_descs, img_idx, output, mean, std, scale, tile_size):
             n_tiles = np.int64(output.shape[0])
             ts = np.int64(tile_size)
             for t in range(n_tiles):
-                img      = imgs[img_idx[t]]
-                orig_h_f = np.float32(tile_descs[t, 0])
-                orig_w_f = np.float32(tile_descs[t, 1])
-                t_row    = tile_descs[t, 4]
-                t_col    = tile_descs[t, 5]
-                new_h    = tile_descs[t, 6]
-                new_w    = tile_descs[t, 7]
+                img    = imgs[img_idx[t]]
+                orig_h = tile_descs[t, 0]
+                orig_w = tile_descs[t, 1]
+                t_row  = tile_descs[t, 4]
+                t_col  = tile_descs[t, 5]
+                new_h  = tile_descs[t, 6]
+                new_w  = tile_descs[t, 7]
                 pad_top  = tile_descs[t, 8]
                 pad_left = tile_descs[t, 9]
-                sy = orig_h_f / np.float32(new_h)
-                sx = orig_w_f / np.float32(new_w)
+                sy = np.float64(orig_h) / np.float64(new_h)
+                sx = np.float64(orig_w) / np.float64(new_w)
+                sup_y = max(1.0, sy)
+                sup_x = max(1.0, sx)
+                sc64  = np.float64(scale)
                 if t_row < np.int64(0):  # thumbnail: direct resize
                     for y in range(ts):
+                        cy = (np.float64(y) + 0.5) * sy - 0.5
+                        y_lo = max(np.int64(0), np.int64(math.floor(cy - sup_y)))
+                        y_hi = min(orig_h,       np.int64(math.ceil(cy + sup_y)))
                         for x in range(ts):
-                            src_y = (np.float32(y) + np.float32(0.5)) * sy - np.float32(0.5)
-                            src_x = (np.float32(x) + np.float32(0.5)) * sx - np.float32(0.5)
-                            pixel = bilinear_sample(img, src_x, src_y)
-                            for ch in range(np.int64(3)):
-                                output[t, ch, y, x] = (pixel[ch] * scale - mean[ch]) / std[ch]
+                            cx = (np.float64(x) + 0.5) * sx - 0.5
+                            x_lo = max(np.int64(0), np.int64(math.floor(cx - sup_x)))
+                            x_hi = min(orig_w,       np.int64(math.ceil(cx + sup_x)))
+                            acc0 = acc1 = acc2 = 0.0
+                            tw = 0.0
+                            for si in range(y_lo, y_hi):
+                                wy = max(0.0, 1.0 - abs(np.float64(si) - cy) / sup_y)
+                                for sj in range(x_lo, x_hi):
+                                    wx = max(0.0, 1.0 - abs(np.float64(sj) - cx) / sup_x)
+                                    w_ij = wy * wx
+                                    if w_ij > 0.0:
+                                        acc0 += w_ij * img[si, sj, 0]
+                                        acc1 += w_ij * img[si, sj, 1]
+                                        acc2 += w_ij * img[si, sj, 2]
+                                        tw += w_ij
+                            if tw > 0.0:
+                                output[t, 0, y, x] = (acc0 / tw * sc64 - mean[0]) / std[0]
+                                output[t, 1, y, x] = (acc1 / tw * sc64 - mean[1]) / std[1]
+                                output[t, 2, y, x] = (acc2 / tw * sc64 - mean[2]) / std[2]
                 else:  # grid tile: aspect-preserving resize + zero-pad
                     row_off = t_row * ts
                     col_off = t_col * ts
@@ -528,16 +588,34 @@ def make_template_llava_full(parallel_tiles: bool):
                         for x in range(ts):
                             gy = row_off + np.int64(y)
                             gx = col_off + np.int64(x)
-                            cy = gy - pad_top
-                            cx = gx - pad_left
-                            if cy < np.int64(0) or cy >= new_h or cx < np.int64(0) or cx >= new_w:
-                                for ch in range(np.int64(3)):
-                                    output[t, ch, y, x] = -mean[ch] / std[ch]
+                            cyi = gy - pad_top
+                            cxi = gx - pad_left
+                            if cyi < np.int64(0) or cyi >= new_h or cxi < np.int64(0) or cxi >= new_w:
+                                output[t, 0, y, x] = -mean[0] / std[0]
+                                output[t, 1, y, x] = -mean[1] / std[1]
+                                output[t, 2, y, x] = -mean[2] / std[2]
                             else:
-                                src_y = (np.float32(cy) + np.float32(0.5)) * sy - np.float32(0.5)
-                                src_x = (np.float32(cx) + np.float32(0.5)) * sx - np.float32(0.5)
-                                pixel = bilinear_sample(img, src_x, src_y)
-                                for ch in range(np.int64(3)):
-                                    output[t, ch, y, x] = (pixel[ch] * scale - mean[ch]) / std[ch]
+                                cy = (np.float64(cyi) + 0.5) * sy - 0.5
+                                cx = (np.float64(cxi) + 0.5) * sx - 0.5
+                                y_lo = max(np.int64(0), np.int64(math.floor(cy - sup_y)))
+                                y_hi = min(orig_h,       np.int64(math.ceil(cy + sup_y)))
+                                x_lo = max(np.int64(0), np.int64(math.floor(cx - sup_x)))
+                                x_hi = min(orig_w,       np.int64(math.ceil(cx + sup_x)))
+                                acc0 = acc1 = acc2 = 0.0
+                                tw = 0.0
+                                for si in range(y_lo, y_hi):
+                                    wy = max(0.0, 1.0 - abs(np.float64(si) - cy) / sup_y)
+                                    for sj in range(x_lo, x_hi):
+                                        wx = max(0.0, 1.0 - abs(np.float64(sj) - cx) / sup_x)
+                                        w_ij = wy * wx
+                                        if w_ij > 0.0:
+                                            acc0 += w_ij * img[si, sj, 0]
+                                            acc1 += w_ij * img[si, sj, 1]
+                                            acc2 += w_ij * img[si, sj, 2]
+                                            tw += w_ij
+                                if tw > 0.0:
+                                    output[t, 0, y, x] = (acc0 / tw * sc64 - mean[0]) / std[0]
+                                    output[t, 1, y, x] = (acc1 / tw * sc64 - mean[1]) / std[1]
+                                    output[t, 2, y, x] = (acc2 / tw * sc64 - mean[2]) / std[2]
 
     return kernel

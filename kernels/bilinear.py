@@ -44,18 +44,46 @@ def bilinear_sample(img, x_f, y_f):
 
 @njit(cache=True)
 def bilinear_resize(img, out_h, out_w):
-    """Resize (H, W, C) uint8 to (out_h, out_w, C) float32 via bilinear interp.
+    """Resize (H, W, C) uint8 to (out_h, out_w, C) float32 using Pillow-compatible
+    BILINEAR filter.
 
-    Pixel-center aligned (align_corners=False): the center of output pixel i
-    maps to source position (i + 0.5) * scale - 0.5.
+    For downsampling (scale > 1) uses a scaled triangle filter (support = scale)
+    to match Pillow's antialias behavior; for upsampling degenerates to standard
+    bilinear. Range bounds use floor/ceil to exactly reproduce Pillow's range
+    computation.
     """
     h, w, c = img.shape
     out = np.empty((out_h, out_w, c), dtype=np.float32)
-    sy = h / out_h
-    sx = w / out_w
-    for y in range(out_h):
-        for x in range(out_w):
-            src_y = (y + 0.5) * sy - 0.5
-            src_x = (x + 0.5) * sx - 0.5
-            out[y, x] = bilinear_sample(img, src_x, src_y)
+    scale_y = h / out_h
+    scale_x = w / out_w
+    sup_y = max(1.0, scale_y)
+    sup_x = max(1.0, scale_x)
+
+    for oi in range(out_h):
+        cy = (oi + 0.5) * scale_y - 0.5
+        y_min = max(0, int(math.floor(cy - sup_y)))
+        y_max = min(h, int(math.ceil(cy + sup_y)))
+
+        for oj in range(out_w):
+            cx = (oj + 0.5) * scale_x - 0.5
+            x_min = max(0, int(math.floor(cx - sup_x)))
+            x_max = min(w, int(math.ceil(cx + sup_x)))
+
+            tv = np.zeros(c, dtype=np.float64)
+            tw = 0.0
+
+            for si in range(y_min, y_max):
+                wy = max(0.0, 1.0 - abs(si - cy) / sup_y)
+                for sj in range(x_min, x_max):
+                    wx = max(0.0, 1.0 - abs(sj - cx) / sup_x)
+                    w_ij = wy * wx
+                    if w_ij > 0.0:
+                        for ch in range(c):
+                            tv[ch] += w_ij * img[si, sj, ch]
+                        tw += w_ij
+
+            if tw > 0.0:
+                for ch in range(c):
+                    out[oi, oj, ch] = tv[ch] / tw
+
     return out
