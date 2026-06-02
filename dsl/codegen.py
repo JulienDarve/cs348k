@@ -152,9 +152,9 @@ def build(pipeline: Pipeline, schedule: Schedule) -> Callable:
     parallel_batch = schedule.parallel_axis() == "batch"
 
     if fusion == "naive":
-        template = make_template_naive(coord)
+        template = make_template_naive(coord, parallel_batch=parallel_batch)
     elif fusion == "pointwise":
-        template = make_template_pointwise(coord)
+        template = make_template_pointwise(coord, parallel_batch=parallel_batch)
     elif fusion == "full":
         template = make_template_full(coord, parallel_batch=parallel_batch)
     else:

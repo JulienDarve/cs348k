@@ -59,9 +59,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from benchmarks.data import load_images, load_images_w3, load_images_w4
 from benchmarks.measurement import time_fn, measure_memory, env_info
 from benchmarks.models import load_processors, MODEL_ID_QWEN
-from kernels.qwen_v1_naive import qwen_v1
-from kernels.qwen_v2_fused import qwen_v2
-from kernels.qwen_v3_storage import qwen_v3
+from kernels.qwen_v1_naive import qwen_v1, qwen_v1_batch
+from kernels.qwen_v2_fused import qwen_v2, qwen_v2_batch
+from kernels.qwen_v3_storage import qwen_v3, qwen_v3_serial
 
 from transformers.image_utils import PILImageResampling
 
@@ -85,9 +85,27 @@ def _wrap_v1(images, proc):
     return {"pixel_values": pv, "image_grid_thw": grid}
 
 
+def _wrap_v1_batch(images, proc):
+    """Call v1_batch and return an HF-compatible dict for output_bytes/output_shape."""
+    pv, grid = qwen_v1_batch(images, min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
+    return {"pixel_values": pv, "image_grid_thw": grid}
+
+
 def _wrap_v2(images, proc):
     """Call v2 and return an HF-compatible dict for output_bytes/output_shape."""
     pv, grid = qwen_v2(images, min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
+    return {"pixel_values": pv, "image_grid_thw": grid}
+
+
+def _wrap_v2_batch(images, proc):
+    """Call v2_batch and return an HF-compatible dict for output_bytes/output_shape."""
+    pv, grid = qwen_v2_batch(images, min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
+    return {"pixel_values": pv, "image_grid_thw": grid}
+
+
+def _wrap_v3_serial(images, proc):
+    """Call v3_serial and return an HF-compatible dict for output_bytes/output_shape."""
+    pv, grid = qwen_v3_serial(images, min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
     return {"pixel_values": pv, "image_grid_thw": grid}
 
 
@@ -97,7 +115,12 @@ def _wrap_v3(images, proc):
     return {"pixel_values": pv, "image_grid_thw": grid}
 
 
-ALL_VARIANTS = ["hf_legacy", "hf_fast", "hf_bilinear", "v1", "v2", "v3"]
+ALL_VARIANTS = [
+    "hf_legacy", "hf_fast", "hf_bilinear",
+    "v1", "v1_batch",
+    "v2", "v2_batch",
+    "v3_serial", "v3",
+]
 
 
 def make_calls(images, q_legacy, q_fast, proc_fast, variants=None):
@@ -114,7 +137,10 @@ def make_calls(images, q_legacy, q_fast, proc_fast, variants=None):
         ("hf_bilinear", lambda: q_fast(images=images, return_tensors="pt",
                                        resample=PILImageResampling.BILINEAR)),
         ("v1",          lambda: _wrap_v1(images, proc_fast)),
+        ("v1_batch",    lambda: _wrap_v1_batch(images, proc_fast)),
         ("v2",          lambda: _wrap_v2(images, proc_fast)),
+        ("v2_batch",    lambda: _wrap_v2_batch(images, proc_fast)),
+        ("v3_serial",   lambda: _wrap_v3_serial(images, proc_fast)),
         ("v3",          lambda: _wrap_v3(images, proc_fast)),
     ]
     return [(name, fn) for name, fn in all_calls if name in selected]
@@ -269,15 +295,24 @@ def main():
     # These calls are intentionally unmeasured; RSS from compilation is not meaningful.
     first_images = images_w2 or images_w3 or images_w4
     assert first_images is not None
-    needs_v1 = variants is None or "v1" in variants
-    needs_v2 = variants is None or "v2" in variants
-    needs_v3 = variants is None or "v3" in variants
-    if needs_v1 or needs_v2 or needs_v3:
+    needs_v1        = variants is None or "v1"        in variants
+    needs_v1_batch  = variants is None or "v1_batch"  in variants
+    needs_v2        = variants is None or "v2"        in variants
+    needs_v2_batch  = variants is None or "v2_batch"  in variants
+    needs_v3_serial = variants is None or "v3_serial" in variants
+    needs_v3        = variants is None or "v3"        in variants
+    if needs_v1 or needs_v1_batch or needs_v2 or needs_v2_batch or needs_v3_serial or needs_v3:
         print("\nWarming up Numba JIT for v1/v2/v3 (first call compiles, ~30s)...")
         if needs_v1:
             _wrap_v1(first_images[:1], proc_fast)
+        if needs_v1_batch:
+            _wrap_v1_batch(first_images[:1], proc_fast)
         if needs_v2:
             _wrap_v2(first_images[:1], proc_fast)
+        if needs_v2_batch:
+            _wrap_v2_batch(first_images[:1], proc_fast)
+        if needs_v3_serial:
+            _wrap_v3_serial(first_images[:1], proc_fast)
         if needs_v3:
             _wrap_v3(first_images[:1], proc_fast)
         print("Numba JIT ready.")

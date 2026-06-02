@@ -41,7 +41,15 @@ from kernels.qwen_v2_fused import qwen_v2
 from kernels.qwen_v3_storage import qwen_v3
 
 from dsl.codegen import build, classify_fusion
-from pipelines.qwen import pipeline as qwen_pipeline, sched_v1, sched_v2, sched_v3
+from pipelines.qwen import (
+    pipeline as qwen_pipeline,
+    sched_v1,
+    sched_v1_batch,
+    sched_v2,
+    sched_v2_batch,
+    sched_v3_serial,
+    sched_v3,
+)
 
 
 def check(name, passed, msg=""):
@@ -74,7 +82,10 @@ def main():
     print("\n--- classify_fusion ---")
     for label, sched, expected in [
         ("v1", sched_v1, "naive"),
+        ("v1_batch", sched_v1_batch, "naive"),
         ("v2", sched_v2, "pointwise"),
+        ("v2_batch", sched_v2_batch, "pointwise"),
+        ("v3_serial", sched_v3_serial, "full"),
         ("v3", sched_v3, "full"),
     ]:
         got = classify_fusion(qwen_pipeline, sched)
@@ -88,14 +99,23 @@ def main():
     # ------------------------------------------------------------------
     print("\n--- build(qwen, sched_*) (Numba JIT compile on first call, ~30s each) ---")
     dsl_v1 = build(qwen_pipeline, sched_v1)
+    dsl_v1_batch = build(qwen_pipeline, sched_v1_batch)
     dsl_v2 = build(qwen_pipeline, sched_v2)
+    dsl_v2_batch = build(qwen_pipeline, sched_v2_batch)
+    dsl_v3_serial = build(qwen_pipeline, sched_v3_serial)
     dsl_v3 = build(qwen_pipeline, sched_v3)
 
     pv_d1_n, g_d1_n = dsl_v1(noise, **kw)
+    pv_d1b_n, g_d1b_n = dsl_v1_batch(noise, **kw)
     pv_d2_n, g_d2_n = dsl_v2(noise, **kw)
+    pv_d2b_n, g_d2b_n = dsl_v2_batch(noise, **kw)
+    pv_d3s_n, g_d3s_n = dsl_v3_serial(noise, **kw)
     pv_d3_n, g_d3_n = dsl_v3(noise, **kw)
     pv_d1_s, g_d1_s = dsl_v1(smooth, **kw)
+    pv_d1b_s, g_d1b_s = dsl_v1_batch(smooth, **kw)
     pv_d2_s, g_d2_s = dsl_v2(smooth, **kw)
+    pv_d2b_s, g_d2b_s = dsl_v2_batch(smooth, **kw)
+    pv_d3s_s, g_d3s_s = dsl_v3_serial(smooth, **kw)
     pv_d3_s, g_d3_s = dsl_v3(smooth, **kw)
 
     # ------------------------------------------------------------------
@@ -172,6 +192,30 @@ def main():
     ]:
         max_diff = float(np.max(np.abs(a - b)))
         ok = check(f"{label} rtol=1e-4", max_diff <= 1e-4,
+                   f"max_diff={max_diff:.2e}")
+        all_passed = all_passed and ok
+
+    # ------------------------------------------------------------------
+    # 5b. New batch-parallel ablation schedules preserve each algorithm.
+    # ------------------------------------------------------------------
+    print("\n--- DSL batch-parallel ablation variants ---")
+    for label, pv_ref, g_ref, pv_new, g_new in [
+        ("DSL-v1_batch vs DSL-v1 (noise)", pv_d1_n, g_d1_n, pv_d1b_n, g_d1b_n),
+        ("DSL-v2_batch vs DSL-v2 (noise)", pv_d2_n, g_d2_n, pv_d2b_n, g_d2b_n),
+        ("DSL-v3_serial vs DSL-v3 (noise)", pv_d3_n, g_d3_n, pv_d3s_n, g_d3s_n),
+        ("DSL-v1_batch vs DSL-v1 (smooth)", pv_d1_s, g_d1_s, pv_d1b_s, g_d1b_s),
+        ("DSL-v2_batch vs DSL-v2 (smooth)", pv_d2_s, g_d2_s, pv_d2b_s, g_d2b_s),
+        ("DSL-v3_serial vs DSL-v3 (smooth)", pv_d3_s, g_d3_s, pv_d3s_s, g_d3s_s),
+    ]:
+        ok = check(f"{label}: output shape", pv_new.shape == pv_ref.shape,
+                   f"new={pv_new.shape} ref={pv_ref.shape}" if pv_new.shape != pv_ref.shape else "")
+        all_passed = all_passed and ok
+        ok = check(f"{label}: image_grid_thw", np.array_equal(g_new, g_ref),
+                   "" if np.array_equal(g_new, g_ref) else f"\n    new={g_new}\n    ref={g_ref}")
+        all_passed = all_passed and ok
+        max_diff = float(np.max(np.abs(pv_new - pv_ref)))
+        ok = check(f"{label}: pixel_values rtol=1e-4",
+                   max_diff <= 1e-4,
                    f"max_diff={max_diff:.2e}")
         all_passed = all_passed and ok
 

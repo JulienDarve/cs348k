@@ -72,6 +72,14 @@ sched_v1 = Schedule(
     preallocate_output=False,
 )
 
+sched_v1_batch = Schedule(
+    stages={
+        **{n: StageSchedule() for n in _NAMES},
+        "resize": StageSchedule(parallel="batch"),
+    },
+    preallocate_output=False,
+)
+
 # v2 — rescale and normalize inlined into the resize pixel loop.
 sched_v2 = Schedule(
     stages={
@@ -80,6 +88,28 @@ sched_v2 = Schedule(
         "normalize": StageSchedule(compute_at="inline"),
     },
     preallocate_output=False,
+)
+
+sched_v2_batch = Schedule(
+    stages={
+        **{n: StageSchedule() for n in _NAMES},
+        "resize": StageSchedule(parallel="batch"),
+        "rescale":   StageSchedule(compute_at="inline"),
+        "normalize": StageSchedule(compute_at="inline"),
+    },
+    preallocate_output=False,
+)
+
+sched_v3_serial = Schedule(
+    stages={
+        **{n: StageSchedule(compute_at="inline") for n in _NAMES},
+        "patchify": StageSchedule(
+            compute_at="inline",
+            store_at="root",
+            write_via="qwen_patch_coords",
+        ),
+    },
+    preallocate_output=True,
 )
 
 # v3 — full fusion, write directly into pre-allocated output, parallel(batch).
@@ -97,4 +127,11 @@ sched_v3 = Schedule(
 )
 
 
-SCHEDULES = {"v1": sched_v1, "v2": sched_v2, "v3": sched_v3}
+SCHEDULES = {
+    "v1": sched_v1,
+    "v1_batch": sched_v1_batch,
+    "v2": sched_v2,
+    "v2_batch": sched_v2_batch,
+    "v3_serial": sched_v3_serial,
+    "v3": sched_v3,
+}

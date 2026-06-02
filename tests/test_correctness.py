@@ -105,9 +105,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from benchmarks.data import load_images_w3, load_images_smooth
 from benchmarks.models import load_processors, MODEL_ID_QWEN
-from kernels.qwen_v1_naive import qwen_v1, smart_resize_dims
-from kernels.qwen_v2_fused import qwen_v2
-from kernels.qwen_v3_storage import qwen_v3
+from kernels.qwen_v1_naive import qwen_v1, qwen_v1_batch, smart_resize_dims
+from kernels.qwen_v2_fused import qwen_v2, qwen_v2_batch
+from kernels.qwen_v3_storage import qwen_v3, qwen_v3_serial
 
 
 def check(name, passed, msg=""):
@@ -121,8 +121,14 @@ def _run_kernel(version, images, proc):
     kw = dict(min_pixels=proc.min_pixels, max_pixels=proc.max_pixels)
     if version == "v1":
         return qwen_v1(images, **kw)
+    if version == "v1_batch":
+        return qwen_v1_batch(images, **kw)
     if version == "v2":
         return qwen_v2(images, **kw)
+    if version == "v2_batch":
+        return qwen_v2_batch(images, **kw)
+    if version == "v3_serial":
+        return qwen_v3_serial(images, **kw)
     if version == "v3":
         return qwen_v3(images, **kw)
     raise ValueError(f"Unknown version: {version}")
@@ -131,7 +137,9 @@ def _run_kernel(version, images, proc):
 def main():
     ap = argparse.ArgumentParser(
         description="Correctness harness for hand-fused Qwen kernel versions.")
-    ap.add_argument("--version", choices=["v1", "v2", "v3"], default="v1",
+    ap.add_argument("--version",
+                    choices=["v1", "v1_batch", "v2", "v2_batch", "v3_serial", "v3"],
+                    default="v1",
                     help="Kernel version to test against HF (default: v1). "
                          "Tests 1-7 run on this version; tests 8-9 always cross-check all versions.")
     ap.add_argument("--num-threads", type=int, default=1,
@@ -351,6 +359,37 @@ def main():
     ok = check("v3 vs v2: pixel_values rtol=1e-4 (smooth)", max_diff_v3_v2_s <= 1e-4,
                f"max_diff={max_diff_v3_v2_s:.2e}")
     all_passed = all_passed and ok
+
+    # ------------------------------------------------------------------
+    # 10. Batch-parallel ablation variants — same algorithm, different
+    #     parallelism only. These checks keep the new benchmark rows honest.
+    # ------------------------------------------------------------------
+    print("\n--- batch-parallel ablation variants (always runs) ---")
+    pv1b_n, grid1b_n = qwen_v1_batch(images, **kw)
+    pv1b_s, grid1b_s = qwen_v1_batch(smooth_images, **kw)
+    pv2b_n, grid2b_n = qwen_v2_batch(images, **kw)
+    pv2b_s, grid2b_s = qwen_v2_batch(smooth_images, **kw)
+    pv3s_n, grid3s_n = qwen_v3_serial(images, **kw)
+    pv3s_s, grid3s_s = qwen_v3_serial(smooth_images, **kw)
+
+    for label, pv_ref, grid_ref, pv_new, grid_new in [
+        ("v1_batch vs v1 (noise)", pv1_n, grid1_n, pv1b_n, grid1b_n),
+        ("v2_batch vs v2 (noise)", pv2_n, grid2_n, pv2b_n, grid2b_n),
+        ("v3_serial vs v3 (noise)", pv3_n, grid3_n, pv3s_n, grid3s_n),
+        ("v1_batch vs v1 (smooth)", pv1_s, grid1_s, pv1b_s, grid1b_s),
+        ("v2_batch vs v2 (smooth)", pv2_s, grid2_s, pv2b_s, grid2b_s),
+        ("v3_serial vs v3 (smooth)", pv3_s, grid3_s, pv3s_s, grid3s_s),
+    ]:
+        ok = check(f"{label}: output shape", pv_new.shape == pv_ref.shape,
+                   f"new={pv_new.shape} ref={pv_ref.shape}" if pv_new.shape != pv_ref.shape else "")
+        all_passed = all_passed and ok
+        ok = check(f"{label}: image_grid_thw", np.array_equal(grid_new, grid_ref),
+                   "" if np.array_equal(grid_new, grid_ref) else f"\n    new={grid_new}\n    ref={grid_ref}")
+        all_passed = all_passed and ok
+        max_diff = float(np.max(np.abs(pv_new - pv_ref)))
+        ok = check(f"{label}: pixel_values rtol=1e-4", max_diff <= 1e-4,
+                   f"max_diff={max_diff:.2e}")
+        all_passed = all_passed and ok
 
     print(f"\n{'All checks passed.' if all_passed else 'Some checks FAILED.'}")
     sys.exit(0 if all_passed else 1)

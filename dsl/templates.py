@@ -46,7 +46,7 @@ def _patch_output_size(orig_h, orig_w, target_h, target_w):
 # template_naive — every stage its own loop + buffer (v1 schedule)
 # ---------------------------------------------------------------------------
 
-def make_template_naive(coord):
+def make_template_naive(coord, parallel_batch: bool = False):
     """Return a (imgs, out_h_arr, out_w_arr, mean, std, scale, P, T, M) → pv callable.
 
     Mirrors qwen_v1_naive: four separate @njit functions, four buffers per
@@ -98,6 +98,47 @@ def make_template_naive(coord):
                                 out[p_idx, col] = img[src_y, src_x, ch]
         return out
 
+    if parallel_batch:
+        @njit(parallel=True, cache=True)
+        def _batch_kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, scale,
+                          output, patch_size, temporal_patch_size, merge_size):
+            n = np.int64(len(imgs))
+            for b in prange(n):
+                arr = imgs[b]
+                resized = bilinear_resize(arr, out_h_arr[b], out_w_arr[b])
+                rescaled = _rescale(resized, scale)
+                normalized = _normalize(rescaled, mean, std)
+                patched = _patchify(normalized, patch_size, temporal_patch_size, merge_size)
+                base = patch_offsets[b]
+                for row in range(patched.shape[0]):
+                    for col in range(patched.shape[1]):
+                        output[base + row, col] = patched[row, col]
+
+        def orchestrate(imgs_uint8, out_h_arr, out_w_arr, mean, std, scale,
+                        patch_size, temporal_patch_size, merge_size):
+            n = len(imgs_uint8)
+            if n == 0:
+                patch_dim = int(temporal_patch_size) * 3 * int(patch_size) * int(patch_size)
+                return np.empty((0, patch_dim), dtype=np.float32)
+
+            n_patches_per = (out_h_arr // int(patch_size)) * (out_w_arr // int(patch_size))
+            patch_offsets = np.zeros(n, dtype=np.int64)
+            for i in range(1, n):
+                patch_offsets[i] = patch_offsets[i - 1] + n_patches_per[i - 1]
+            total_patches = int(patch_offsets[-1] + n_patches_per[-1])
+            patch_dim = int(temporal_patch_size) * 3 * int(patch_size) * int(patch_size)
+            output = np.empty((total_patches, patch_dim), dtype=np.float32)
+
+            typed_imgs = numba.typed.List(imgs_uint8)
+            _batch_kernel(
+                typed_imgs, out_h_arr, out_w_arr, patch_offsets,
+                mean, std, np.float32(scale), output,
+                int(patch_size), int(temporal_patch_size), int(merge_size),
+            )
+            return output
+
+        return orchestrate
+
     def orchestrate(imgs_uint8, out_h_arr, out_w_arr, mean, std, scale,
                     patch_size, temporal_patch_size, merge_size):
         outputs = []
@@ -119,7 +160,7 @@ def make_template_naive(coord):
 # template_pointwise — rescale + normalize inlined into resize (v2 schedule)
 # ---------------------------------------------------------------------------
 
-def make_template_pointwise(coord):
+def make_template_pointwise(coord, parallel_batch: bool = False):
     """Return a (imgs, out_h_arr, out_w_arr, mean, std, scale, P, T, M) → pv callable.
 
     Mirrors qwen_v2_fused: one fused (resize+rescale+normalize) njit kernel
@@ -169,6 +210,46 @@ def make_template_pointwise(coord):
                                 )
                                 out[p_idx, col] = img[src_y, src_x, ch]
         return out
+
+    if parallel_batch:
+        @njit(parallel=True, cache=True)
+        def _batch_kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, scale,
+                          output, patch_size, temporal_patch_size, merge_size):
+            n = np.int64(len(imgs))
+            for b in prange(n):
+                arr = imgs[b]
+                normalized = _resize_normalize(arr, out_h_arr[b], out_w_arr[b],
+                                               mean, std, scale)
+                patched = _patchify(normalized, patch_size, temporal_patch_size, merge_size)
+                base = patch_offsets[b]
+                for row in range(patched.shape[0]):
+                    for col in range(patched.shape[1]):
+                        output[base + row, col] = patched[row, col]
+
+        def orchestrate(imgs_uint8, out_h_arr, out_w_arr, mean, std, scale,
+                        patch_size, temporal_patch_size, merge_size):
+            n = len(imgs_uint8)
+            if n == 0:
+                patch_dim = int(temporal_patch_size) * 3 * int(patch_size) * int(patch_size)
+                return np.empty((0, patch_dim), dtype=np.float32)
+
+            n_patches_per = (out_h_arr // int(patch_size)) * (out_w_arr // int(patch_size))
+            patch_offsets = np.zeros(n, dtype=np.int64)
+            for i in range(1, n):
+                patch_offsets[i] = patch_offsets[i - 1] + n_patches_per[i - 1]
+            total_patches = int(patch_offsets[-1] + n_patches_per[-1])
+            patch_dim = int(temporal_patch_size) * 3 * int(patch_size) * int(patch_size)
+            output = np.empty((total_patches, patch_dim), dtype=np.float32)
+
+            typed_imgs = numba.typed.List(imgs_uint8)
+            _batch_kernel(
+                typed_imgs, out_h_arr, out_w_arr, patch_offsets,
+                mean, std, np.float32(scale), output,
+                int(patch_size), int(temporal_patch_size), int(merge_size),
+            )
+            return output
+
+        return orchestrate
 
     def orchestrate(imgs_uint8, out_h_arr, out_w_arr, mean, std, scale,
                     patch_size, temporal_patch_size, merge_size):

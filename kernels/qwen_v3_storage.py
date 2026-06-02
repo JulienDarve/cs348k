@@ -103,6 +103,50 @@ def _v3_kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, output,
                         output[p_idx, col] = v
 
 
+@njit(cache=True)
+def _v3_serial_kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, output,
+                      patch_size, temporal_patch_size, merge_size):
+    """Fused bilinear resize + rescale + normalize + patchify, serial over batch."""
+    n = np.int64(len(imgs))
+    for b in range(n):
+        img = imgs[b]
+        out_h = out_h_arr[b]
+        out_w = out_w_arr[b]
+
+        h = img.shape[0]
+        w = img.shape[1]
+        c = img.shape[2]
+        sy = h / out_h
+        sx = w / out_w
+        sup_y = max(1.0, sy)
+        sup_x = max(1.0, sx)
+
+        n_patches_w = out_w // patch_size
+        base = patch_offsets[b]
+
+        for y in range(out_h):
+            for x in range(out_w):
+                src_y = (y + 0.5) * sy - 0.5
+                src_x = (x + 0.5) * sx - 0.5
+                pixel = bilinear_filter_sample(img, src_x, src_y, sup_x, sup_y)
+
+                i_ph = y // patch_size
+                i_pw = x // patch_size
+                py_in_patch = y % patch_size
+                px_in_patch = x % patch_size
+                p_idx = base + patch_linear_index(i_ph, i_pw, n_patches_w, merge_size)
+
+                for ch in range(c):
+                    r = pixel[ch] * (1.0 / 255.0)
+                    v = (r - mean[ch]) / std[ch]
+                    for t in range(temporal_patch_size):
+                        col = patch_output_offset(
+                            t, ch, py_in_patch, px_in_patch,
+                            c, patch_size, temporal_patch_size,
+                        )
+                        output[p_idx, col] = v
+
+
 # ---------------------------------------------------------------------------
 # qwen_v3 — Python orchestration: pre-allocate, then dispatch to _v3_kernel
 # ---------------------------------------------------------------------------
@@ -154,6 +198,51 @@ def qwen_v3(images, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS):
                PATCH_SIZE, TEMPORAL_PATCH_SIZE, MERGE_SIZE)
 
     # ALGORITHM: build image_grid_thw (T, H_patches, W_patches) per image
+    grid_thw = np.stack([
+        np.array([1, int(out_h_arr[i]) // PATCH_SIZE, int(out_w_arr[i]) // PATCH_SIZE],
+                 dtype=np.int64)
+        for i in range(n)
+    ], axis=0)
+
+    return output, grid_thw
+
+
+def qwen_v3_serial(images, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS):
+    """Full-fusion, pre-allocated Qwen preprocessing with a serial batch loop."""
+    n = len(images)
+    patch_dim = TEMPORAL_PATCH_SIZE * 3 * PATCH_SIZE * PATCH_SIZE
+    if n == 0:
+        return (np.empty((0, patch_dim), dtype=np.float32),
+                np.empty((0, 3), dtype=np.int64))
+
+    arrs = [np.asarray(img, dtype=np.uint8) for img in images]
+
+    out_h_list = []
+    out_w_list = []
+    for arr in arrs:
+        oh, ow = smart_resize_dims(arr.shape[0], arr.shape[1],
+                                   factor=FACTOR,
+                                   min_pixels=min_pixels,
+                                   max_pixels=max_pixels)
+        out_h_list.append(oh)
+        out_w_list.append(ow)
+
+    out_h_arr = np.array(out_h_list, dtype=np.int64)
+    out_w_arr = np.array(out_w_list, dtype=np.int64)
+
+    n_patches_per = (out_h_arr // PATCH_SIZE) * (out_w_arr // PATCH_SIZE)
+    patch_offsets = np.zeros(n, dtype=np.int64)
+    for i in range(1, n):
+        patch_offsets[i] = patch_offsets[i - 1] + n_patches_per[i - 1]
+    total_patches = int(patch_offsets[-1] + n_patches_per[-1])
+
+    output = np.empty((total_patches, patch_dim), dtype=np.float32)
+
+    typed_imgs = numba.typed.List(arrs)
+    _v3_serial_kernel(typed_imgs, out_h_arr, out_w_arr, patch_offsets,
+                      QWEN_MEAN, QWEN_STD, output,
+                      PATCH_SIZE, TEMPORAL_PATCH_SIZE, MERGE_SIZE)
+
     grid_thw = np.stack([
         np.array([1, int(out_h_arr[i]) // PATCH_SIZE, int(out_w_arr[i]) // PATCH_SIZE],
                  dtype=np.int64)

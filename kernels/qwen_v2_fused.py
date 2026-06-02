@@ -17,7 +17,8 @@ What this defines for the DSL:
 """
 
 import numpy as np
-from numba import njit
+import numba
+from numba import njit, prange
 
 from kernels.bilinear import bilinear_filter_sample
 from kernels.patch_coords import patch_linear_index, patch_output_offset
@@ -110,3 +111,66 @@ def qwen_v2(images, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS):
     pixel_values = np.concatenate(outputs, axis=0)
     image_grid_thw = np.array(grid_thw, dtype=np.int64)
     return pixel_values, image_grid_thw
+
+
+# ---------------------------------------------------------------------------
+# qwen_v2_batch — same pointwise-fused algorithm, parallel over batch
+# ---------------------------------------------------------------------------
+
+@njit(parallel=True, cache=True)
+def _v2_batch_kernel(imgs, out_h_arr, out_w_arr, patch_offsets, output,
+                     mean, std, patch_size, temporal_patch_size, merge_size):
+    n = np.int64(len(imgs))
+    for b in prange(n):
+        arr = imgs[b]
+
+        normalized = _resize_normalize(arr, out_h_arr[b], out_w_arr[b], mean, std)
+        patched = patchify(normalized, patch_size, temporal_patch_size, merge_size)
+
+        base = patch_offsets[b]
+        for row in range(patched.shape[0]):
+            for col in range(patched.shape[1]):
+                output[base + row, col] = patched[row, col]
+
+
+def qwen_v2_batch(images, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS):
+    """Pointwise-fused Qwen preprocessing with independent images processed in parallel."""
+    n = len(images)
+    patch_dim = TEMPORAL_PATCH_SIZE * 3 * PATCH_SIZE * PATCH_SIZE
+    if n == 0:
+        return (np.empty((0, patch_dim), dtype=np.float32),
+                np.empty((0, 3), dtype=np.int64))
+
+    arrs = [np.asarray(img, dtype=np.uint8) for img in images]
+
+    out_h_list = []
+    out_w_list = []
+    for arr in arrs:
+        oh, ow = smart_resize_dims(arr.shape[0], arr.shape[1],
+                                   factor=FACTOR,
+                                   min_pixels=min_pixels,
+                                   max_pixels=max_pixels)
+        out_h_list.append(oh)
+        out_w_list.append(ow)
+
+    out_h_arr = np.array(out_h_list, dtype=np.int64)
+    out_w_arr = np.array(out_w_list, dtype=np.int64)
+    n_patches_per = (out_h_arr // PATCH_SIZE) * (out_w_arr // PATCH_SIZE)
+    patch_offsets = np.zeros(n, dtype=np.int64)
+    for i in range(1, n):
+        patch_offsets[i] = patch_offsets[i - 1] + n_patches_per[i - 1]
+    total_patches = int(patch_offsets[-1] + n_patches_per[-1])
+
+    output = np.empty((total_patches, patch_dim), dtype=np.float32)
+    typed_imgs = numba.typed.List(arrs)
+    _v2_batch_kernel(typed_imgs, out_h_arr, out_w_arr, patch_offsets, output,
+                     QWEN_MEAN, QWEN_STD,
+                     PATCH_SIZE, TEMPORAL_PATCH_SIZE, MERGE_SIZE)
+
+    grid_thw = np.stack([
+        np.array([1, int(out_h_arr[i]) // PATCH_SIZE, int(out_w_arr[i]) // PATCH_SIZE],
+                 dtype=np.int64)
+        for i in range(n)
+    ], axis=0)
+
+    return output, grid_thw
