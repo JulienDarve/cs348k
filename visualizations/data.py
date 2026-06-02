@@ -1,10 +1,20 @@
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 import re
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKLOADS = ("W2", "W3", "W4")
+FINAL_METHODS = ("hf_legacy", "hf_fast", "hf_bilinear", "dsl_v1", "dsl_v2", "dsl_v3")
+FINAL_METHOD_LABELS = {
+    "hf_legacy": "HF Legacy",
+    "hf_fast": "HF Fast",
+    "hf_bilinear": "HF Bilinear",
+    "dsl_v1": "DSL v1",
+    "dsl_v2": "DSL v2",
+    "dsl_v3": "DSL v3",
+}
 
 
 @dataclass(frozen=True)
@@ -27,6 +37,134 @@ def _parse_numeric_cell(cell: str) -> float | None:
     if match is None:
         return None
     return float(match.group(0))
+
+
+def _parse_final_results_heading(line: str) -> tuple[str, str] | None:
+    if "Four-Threaded" in line:
+        return None
+    if "Runtime" in line:
+        metric = "runtime"
+    elif "Memory" in line:
+        metric = "memory"
+    else:
+        return None
+
+    thread = "single" if "Single-Threaded" in line else "multi"
+    return thread, metric
+
+
+@lru_cache(maxsize=1)
+def load_final_results() -> dict[tuple[str, str, str], dict[str, dict[str, float]]]:
+    """Parse FINAL_RESULTS.md tables keyed by (family, thread, metric)."""
+    path = REPO_ROOT / "FINAL_RESULTS.md"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    tables: dict[tuple[str, str, str], dict[str, dict[str, float]]] = {}
+    family: str | None = None
+    pending_key: tuple[str, str, str] | None = None
+    i = 0
+
+    while i < len(lines):
+        line = lines[i].strip()
+        if line == "## Qwen Results":
+            family = "qwen"
+            pending_key = None
+            i += 1
+            continue
+        if line == "## LLaVA Results":
+            family = "llava"
+            pending_key = None
+            i += 1
+            continue
+        if line.startswith("### Chart ") and family is not None:
+            heading = _parse_final_results_heading(line)
+            pending_key = (family, *heading) if heading is not None else None
+            i += 1
+            continue
+
+        if pending_key is None or not line.startswith("| Workload |"):
+            i += 1
+            continue
+
+        i += 2
+        rows: dict[str, dict[str, float]] = {}
+        while i < len(lines) and lines[i].strip().startswith("|"):
+            row_line = lines[i].strip()
+            if row_line.startswith("|---"):
+                i += 1
+                continue
+            cells = [cell.strip() for cell in row_line.strip("|").split("|")]
+            if len(cells) != len(FINAL_METHODS) + 1:
+                break
+            workload = cells[0]
+            rows[workload] = {}
+            for method, cell in zip(FINAL_METHODS, cells[1:]):
+                value = _parse_numeric_cell(cell)
+                if value is None:
+                    raise ValueError(f"Missing value for {pending_key} {workload} {method}")
+                rows[workload][method] = value
+            i += 1
+
+        tables[pending_key] = rows
+
+    expected = {
+        (family_name, thread, metric)
+        for family_name in ("qwen", "llava")
+        for thread in ("multi", "single")
+        for metric in ("runtime", "memory")
+    }
+    missing = expected.difference(tables)
+    if missing:
+        raise ValueError(f"Missing FINAL_RESULTS.md tables: {sorted(missing)}")
+    return tables
+
+
+def get_final_grouped_bar_data(family: str, thread: str, metric: str) -> dict[str, object]:
+    tables = load_final_results()
+    rows = tables[(family, thread, metric)]
+    series = {
+        FINAL_METHOD_LABELS[method]: [rows[workload][method] for workload in WORKLOADS]
+        for method in FINAL_METHODS
+    }
+    return {
+        "family": family,
+        "thread": thread,
+        "metric": metric,
+        "workloads": WORKLOADS,
+        "series": series,
+    }
+
+
+def get_final_pareto_points() -> dict[tuple[str, str, str], list[dict[str, float | str]]]:
+    tables = load_final_results()
+    points: dict[tuple[str, str, str], list[dict[str, float | str]]] = {}
+
+    for family in ("qwen", "llava"):
+        for thread in ("multi", "single"):
+            runtime_rows = tables[(family, thread, "runtime")]
+            memory_rows = tables[(family, thread, "memory")]
+            for workload in WORKLOADS:
+                points[(family, thread, workload)] = [
+                    {
+                        "method": method,
+                        "label": FINAL_METHOD_LABELS[method],
+                        "runtime": runtime_rows[workload][method],
+                        "memory": memory_rows[workload][method],
+                    }
+                    for method in FINAL_METHODS
+                ]
+
+    return points
+
+
+def get_pareto_frontier(points: list[dict[str, float | str]]) -> list[dict[str, float | str]]:
+    frontier = []
+    best_memory = float("inf")
+    for point in sorted(points, key=lambda item: (float(item["runtime"]), float(item["memory"]))):
+        memory = float(point["memory"])
+        if memory <= best_memory:
+            frontier.append(point)
+            best_memory = memory
+    return frontier
 
 
 def load_markdown_results(relative_path: str) -> dict[str, dict[str, BenchmarkRow]]:
