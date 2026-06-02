@@ -63,10 +63,18 @@ def _save(fig, filename):
     return path
 
 
-def plot_slide_5_qwen_memory_floor():
+def _plot_memory_floor_panel(
+    ax,
+    family,
+    thread,
+    title,
+    dsl_legend_label,
+    legend_columns,
+    show_ylabel=True,
+):
     data = get_final_selected_grouped_data(
-        "qwen",
-        "multi",
+        family,
+        thread,
         "memory",
         ("hf_legacy", "hf_fast", "hf_bilinear", "dsl_v3"),
     )
@@ -75,14 +83,14 @@ def plot_slide_5_qwen_memory_floor():
     x = np.arange(len(workloads))
     width = 0.18
 
-    fig, ax = plt.subplots(figsize=(10.4, 5.7))
     for idx, (label, values) in enumerate(series.items()):
         offset = (idx - (len(series) - 1) / 2) * width
+        legend_label = dsl_legend_label if label == "DSL v3" else label
         bars = ax.bar(
             x + offset,
             values,
             width,
-            label=label,
+            label=legend_label,
             color=COLORS[label],
             edgecolor="white",
             linewidth=0.9,
@@ -91,56 +99,76 @@ def plot_slide_5_qwen_memory_floor():
             _annotate_bars(ax, bars, "{:.2f}x", fontsize=9)
 
     ax.axhline(1.0, color="#111827", linestyle=(0, (4, 3)), linewidth=1.2, alpha=0.8)
-    ax.text(len(workloads) - 0.38, 1.07, "output floor", ha="right", va="bottom", fontsize=10)
-    ax.set_title("Qwen Storage Fusion Drives Peak Memory to the Output Floor", fontsize=15, pad=14)
-    ax.set_ylabel("Peak / Output RSS (x)")
+    ax.text(
+        1.005,
+        1.04,
+        "output floor",
+        transform=ax.get_yaxis_transform(),
+        ha="left",
+        va="bottom",
+        fontsize=10,
+        clip_on=False,
+    )
+    ax.set_title(title, fontsize=14, pad=12)
+    if show_ylabel:
+        ax.set_ylabel("Peak / Output RSS (x)")
     ax.set_xticks(x)
     ax.set_xticklabels(workloads)
-    ax.set_ylim(0, 4.25)
-    ax.legend(frameon=True, ncol=4, loc="upper left")
+    ax.set_ylim(0, 4.35)
+    ax.legend(frameon=True, ncol=legend_columns, loc="upper left", fontsize=9)
     _style_axes(ax)
+
+
+def plot_slide_5_qwen_memory_floor():
+    fig, ax = plt.subplots(figsize=(9.4, 5.7))
+    _plot_memory_floor_panel(
+        ax,
+        "qwen",
+        "single",
+        "Qwen Storage Fusion Drives Peak Memory to the Output Floor",
+        "DSL v3 (Qwen)",
+        4,
+    )
     fig.tight_layout()
     return _save(fig, "slide_5_qwen_memory_floor.png")
 
 
 def plot_slide_5_llava_singlethread_memory_floor():
-    data = get_final_selected_grouped_data(
+    fig, ax = plt.subplots(figsize=(9.4, 5.7))
+    _plot_memory_floor_panel(
+        ax,
         "llava",
         "single",
-        "memory",
-        ("hf_legacy", "hf_fast", "hf_bilinear", "dsl_v3"),
+        "LLaVA-NeXT Memory Reaches the Output Floor",
+        "DSL v3 (LLaVA)",
+        4,
     )
-    workloads = list(data["workloads"])
-    series = data["series"]
-    x = np.arange(len(workloads))
-    width = 0.18
-
-    fig, ax = plt.subplots(figsize=(10.4, 5.7))
-    for idx, (label, values) in enumerate(series.items()):
-        offset = (idx - (len(series) - 1) / 2) * width
-        bars = ax.bar(
-            x + offset,
-            values,
-            width,
-            label=label,
-            color=COLORS[label],
-            edgecolor="white",
-            linewidth=0.9,
-        )
-        if label == "DSL v3":
-            _annotate_bars(ax, bars, "{:.2f}x", fontsize=9)
-
-    ax.axhline(1.0, color="#111827", linestyle=(0, (4, 3)), linewidth=1.2, alpha=0.8)
-    ax.text(len(workloads) - 0.38, 1.07, "output floor", ha="right", va="bottom", fontsize=10)
-    ax.set_title("LLaVA-NeXT Memory Reaches the Output Floor", fontsize=15, pad=14)
-    ax.set_ylabel("Peak / Output RSS (x)")
-    ax.set_xticks(x)
-    ax.set_xticklabels(workloads)
-    ax.set_ylim(0, 4.35)
-    ax.legend(frameon=True, ncol=4, loc="upper left")
-    _style_axes(ax)
     fig.tight_layout()
     return _save(fig, "slide_5_llava_singlethread_memory_floor.png")
+
+
+def plot_slide_5_combined_memory_floor():
+    fig, axes = plt.subplots(1, 2, figsize=(15.4, 5.8), sharey=True)
+    _plot_memory_floor_panel(
+        axes[0],
+        "qwen",
+        "single",
+        "Qwen",
+        "DSL v3 (Qwen)",
+        2,
+    )
+    _plot_memory_floor_panel(
+        axes[1],
+        "llava",
+        "single",
+        "LLaVA-NeXT",
+        "DSL v3 (LLaVA)",
+        2,
+        show_ylabel=False,
+    )
+    fig.suptitle("Peak Memory Reaches the Output Floor", fontsize=16, y=1.02)
+    fig.tight_layout()
+    return _save(fig, "slide_5_qwen_llava_memory_floor.png")
 
 
 def plot_slide_6_qwen_w4_thread_scaling():
@@ -383,6 +411,7 @@ def main():
     paths = [
         plot_slide_5_qwen_memory_floor(),
         plot_slide_5_llava_singlethread_memory_floor(),
+        plot_slide_5_combined_memory_floor(),
         plot_slide_6_qwen_w4_thread_scaling(),
         plot_slide_7_qwen_schedule_axes(),
         plot_slide_8_llava_schedule_flat_runtime(),
