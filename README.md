@@ -96,6 +96,26 @@ Contains Python scripts for creating visualizations from the output data.
 
 - `milestone_2_runtime_memory_pareto.py`: Creates a runtime versus peak/output memory Pareto chart for the Milestone 2 Qwen kernels.
 
+- `data.py`: Parses AWS benchmark result markdown tables and prepares derived plotting data for final-result visualizations.
+
+- `final_results_charts.py`: Creates final presentation charts for Qwen DSL speedups, thread scaling, schedule ablations, runtime/memory Pareto, and HF Fast baseline context.
+
+- `final_results_gallery.md`: Links the final generated figures with short presentation captions.
+
+#### `visualizations/figures/`
+
+- `final_qwen_multithread_speedup.png`: Shows 8-thread Qwen runtime speedups over HF Fast for HF, hand-written, and DSL implementations.
+
+- `final_qwen_thread_scaling.png`: Shows Qwen 1-thread to 8-thread scaling for HF Fast, hand v3, and DSL v3.
+
+- `final_qwen_dsl_schedule_ablation.png`: Shows single-thread and 8-thread DSL v1/v2/v3 schedule speedups over DSL v1.
+
+- `final_qwen_runtime_memory_pareto.png`: Shows the 8-thread Qwen runtime versus peak/output memory Pareto frontier.
+
+- `final_hf_fast_memory_overhead.png`: Shows multi-thread HF Fast peak/output memory overhead across Qwen, InternVL, and LLaVA.
+
+- `final_hf_fast_thread_scaling.png`: Shows HF Fast 1-thread to 8-thread scaling across Qwen, InternVL, and LLaVA.
+
 ### `results/` 
 Notes about intermediate results
 
@@ -115,9 +135,9 @@ Notes about intermediate results
 
 - `bench_dsl_results.md`: Summarizes AWS `c7i.4xlarge` single-thread W2 timing results for Qwen HF baselines, hand-tuned kernels, and DSL kernel ablations.
 
-- `bench_dsl_results_multi_thread.md`: Summarizes AWS `c7i.4xlarge` multi-thread W2 timing results for Qwen HF baselines, hand-tuned kernels, and DSL kernel ablations.
+- `bench_dsl_results_multi_thread.md`: Summarizes AWS `c7i.4xlarge` multi-thread W2/W3/W4 timing and memory results for Qwen HF baselines, hand-tuned kernels, and DSL kernel ablations.
 
-- `full_benchmarks_multi_thread_results.md`: Summarizes AWS `c7i.4xlarge` multi-thread full benchmark memory results from the clean memory-only benchmark run.
+- `full_benchmarks_multi_thread_results.md`: Summarizes AWS `c7i.4xlarge` multi-thread full benchmark timing and memory results for Qwen, InternVL, and LLaVA.
 
 - `full_benchmarks_single_thread_results.md`: Summarizes AWS `c7i.4xlarge` single-thread full benchmark memory results from the clean memory-only benchmark run.
 
