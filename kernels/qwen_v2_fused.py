@@ -19,7 +19,7 @@ What this defines for the DSL:
 import numpy as np
 from numba import njit
 
-from kernels.bilinear import bilinear_sample
+from kernels.bilinear import bilinear_filter_sample
 from kernels.patch_coords import patch_linear_index, patch_output_offset
 from kernels.qwen_v1_naive import (
     smart_resize_dims,
@@ -50,13 +50,15 @@ def _resize_normalize(img, out_h, out_w, mean, std):
     # ALGORITHM: scale factors map output pixel centers to source pixel centers
     sy = h / out_h
     sx = w / out_w
+    sup_y = max(1.0, sy)
+    sup_x = max(1.0, sx)
     for y in range(out_h):
         for x in range(out_w):
             # ALGORITHM: pixel-center aligned sampling (align_corners=False)
             src_y = (y + 0.5) * sy - 0.5
             src_x = (x + 0.5) * sx - 0.5
-            # ALGORITHM: bilinear sample → float32 pixel vector (length C)
-            px = bilinear_sample(img, src_x, src_y)
+            # ALGORITHM: Pillow-compatible bilinear sample → float32 pixel vector
+            px = bilinear_filter_sample(img, src_x, src_y, sup_x, sup_y)
             for ch in range(c):
                 # ALGORITHM: rescale [0,255] → [0,1]
                 # SCHEDULE: compute_at(resize, inline) — result in register only

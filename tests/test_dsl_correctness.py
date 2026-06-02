@@ -16,10 +16,10 @@ Checks (in order, all must pass to clear the D3 gate):
      accumulation-order noise, not an algorithmic difference).
   5. DSL reproduces the v1↔v2↔v3 spread: DSL-v2 and DSL-v3 each agree
      with DSL-v1 within rtol=1e-4 (same algorithm, different schedule).
-  6. DSL-v3 matches HF fast forced to bilinear+antialias=False within the
-     same float32 accumulation-order floor (atol=0.05) that
-     tests/test_correctness.py uses for the hand kernels — establishes
-     that the DSL inherits the v1's correctness against HF.
+  6. DSL-v3 matches HF fast forced to BILINEAR within the same float32
+     accumulation-order floor (atol=0.05) that tests/test_correctness.py
+     uses for the hand kernels — establishes that the DSL inherits the v1's
+     correctness against HF.
 
 The "all schedules produce equal output" property (5) is the load-bearing
 claim: changing the schedule must not change the algorithm's output.
@@ -27,27 +27,9 @@ claim: changing the schedule must not change the algorithm's output.
 
 import argparse
 import sys
-from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
-
-
-@contextmanager
-def _hf_no_antialias():
-    """Force torchvision F.resize(antialias=False) inside the with-block."""
-    import torchvision.transforms.v2.functional as Fmod
-    original = Fmod.resize
-
-    def _patched(*args, **kwargs):
-        kwargs["antialias"] = False
-        return original(*args, **kwargs)
-
-    Fmod.resize = _patched
-    try:
-        yield
-    finally:
-        Fmod.resize = original
 
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -96,7 +78,7 @@ def main():
         ("v3", sched_v3, "full"),
     ]:
         got = classify_fusion(qwen_pipeline, sched)
-        ok = check(f"sched_{label} → {expected!r}",
+        ok = check(f"sched_{label} -> {expected!r}",
                    got == expected,
                    f"got {got!r}")
         all_passed = all_passed and ok
@@ -194,16 +176,15 @@ def main():
         all_passed = all_passed and ok
 
     # ------------------------------------------------------------------
-    # 6. DSL-v3 vs HF fast (BILINEAR, antialias=False) — fully matched.
+    # 6. DSL-v3 vs HF fast (BILINEAR) — algorithm-matched.
     #    Inherits the same accumulation-order floor as the hand kernels.
     # ------------------------------------------------------------------
-    print("\n--- DSL-v3 vs HF fast (BILINEAR, antialias=False) ---")
+    print("\n--- DSL-v3 vs HF fast (BILINEAR) ---")
     from transformers.image_utils import PILImageResampling
-    with _hf_no_antialias():
-        hf_out_n = proc(images=noise, return_tensors="pt",
-                        resample=PILImageResampling.BILINEAR)
-        hf_out_s = proc(images=smooth, return_tensors="pt",
-                        resample=PILImageResampling.BILINEAR)
+    hf_out_n = proc(images=noise, return_tensors="pt",
+                    resample=PILImageResampling.BILINEAR)
+    hf_out_s = proc(images=smooth, return_tensors="pt",
+                    resample=PILImageResampling.BILINEAR)
     hf_pv_n = hf_out_n["pixel_values"].numpy()
     hf_pv_s = hf_out_s["pixel_values"].numpy()
     md_hf_n = float(np.max(np.abs(pv_d3_n - hf_pv_n)))

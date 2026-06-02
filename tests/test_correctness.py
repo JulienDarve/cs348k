@@ -7,12 +7,10 @@ Run from the repo root:
 ALGORITHM CHOICE
 ================================================================================
 HF's Qwen2VLImageProcessorFast uses BICUBIC + antialias=True (torchvision
-default). Our v1 kernel uses naive bilinear (4 taps, no antialias filter), per
-kernel_implementation.md. Bilinear was chosen for v1 because it is a simpler
-algorithm IR to optimize and iterate on while building the v2/v3 scheduling
-story. For VLM training quality the two choices are nearly indistinguishable;
-for ms-level inference parity on a released checkpoint, HF's bicubic+antialias
-would need to be matched exactly.
+default). Our kernels use Pillow-compatible BILINEAR: a scaled triangle filter
+for downsampling and standard bilinear for upsampling. Bilinear remains the
+simpler algorithm IR for the v1/v2/v3 scheduling story, while the antialias
+filter keeps all three schedules aligned with HF's BILINEAR path.
 
 ================================================================================
 CHECKS
@@ -22,29 +20,28 @@ CHECKS
   3. v1 image_grid_thw matches HF fast (spatial patch counts).
   4. v1 pixel_values vs HF fast as shipped (BICUBIC + antialias) — both
      smooth and noise inputs, loose tolerances since algorithms differ.
-  5. v1 pixel_values vs HF fast forced to BILINEAR (antialias still on) —
-     algorithm partially matched, isolates the antialias filter's effect.
+  5. v1 pixel_values vs HF fast forced to BILINEAR — algorithm-matched.
   6. v1 pixel_values vs HF fast forced to BILINEAR + antialias=False (via
-     a contextmanager that patches torchvision.F.resize) — fully matched.
-     Any remaining gap is pure float32 reduction-order noise.
+     a contextmanager that patches torchvision.F.resize) — diagnostic check
+     showing the expected antialias gap on high-frequency noise.
 
 ================================================================================
 EMPIRICAL RESULTS (seed=0, n_images=4)
 ================================================================================
                                      noise input    smooth input
   HF bicubic + antialias              0.6951         0.0177
-  HF bilinear + antialias             0.1194         0.0151
-  HF bilinear, antialias=False        0.0150         0.0150
+  HF bilinear + antialias             0.0150         0.0150
+  HF bilinear, antialias=False        0.1155         0.0155
 
 Each residual is fully explained by a named algorithmic difference:
 
   - 0.6951 (noise, bicubic+aa)   = bicubic-vs-bilinear  +  antialias  +  fp
-  - 0.1194 (noise, bilinear+aa)  = antialias filter  +  fp           (~0.10 from
-                                                                       antialias)
+  - 0.0150 (noise, bilinear+aa)  = fp only
   - 0.0177 (smooth, bicubic+aa)  = tiny bicubic-vs-bilinear  +  fp   (~0.003
                                                                        from bicubic)
-  - 0.0151 (smooth, bilinear+aa) = fp only (antialias does ~nothing on smooth)
-  - 0.0150 (both, bilinear+noAA) = fp only — the FLOOR
+  - 0.0150 (smooth, bilinear+aa) = fp only
+  - 0.1155 (noise, bilinear+noAA) = antialias filter + fp
+  - 0.0155 (smooth, bilinear+noAA) = fp only (antialias does ~nothing on smooth)
 
 The ~0.015 floor (~0.4% of normalized range, ~1 pixel value out of 255) is the
 irreducible difference between two correct implementations of the same algorithm
@@ -71,8 +68,7 @@ WHAT THIS MEANS FOR BENCHMARKING
 Comparing v1 (bilinear) against HF-as-shipped (bicubic+antialias) conflates two
 speedups: (a) algorithmic savings from cheaper interpolation, (b) scheduling
 wins from fusion/tiling/format-handling. For honest speedup numbers, also
-benchmark HF with `resample=PILImageResampling.BILINEAR` (and optionally with
-antialias=False via the contextmanager below) so the (b)→(c) gap isolates the
+benchmark HF with `resample=PILImageResampling.BILINEAR` so the gap isolates the
 schedule win.
 """
 
@@ -219,10 +215,9 @@ def main():
 
     # ------------------------------------------------------------------
     # 6. <ver> vs HF fast forced to BILINEAR (algorithm-matched comparison)
-    #    Removes the bicubic-vs-bilinear confound: any remaining gap is
-    #    just torchvision's antialias filter vs our naive 4-tap bilinear.
-    #    On smooth inputs both should be effectively identical (atol=0.05).
-    #    On noise the antialias filter still widens the gap, so use atol=0.3.
+    #    Removes the bicubic-vs-bilinear confound. Our filtered bilinear sampler
+    #    matches torchvision's antialias=True BILINEAR path within the usual
+    #    float32 accumulation-order floor.
     # ------------------------------------------------------------------
     print(f"\n--- {ver} vs HF fast (BILINEAR, algorithm-matched) ---")
     from transformers.image_utils import PILImageResampling
@@ -246,25 +241,23 @@ def main():
                f"max_diff={max_diff_bl_s:.4f}")
     all_passed = all_passed and ok
 
-    # 6b. noise images — looser tolerance (antialias filter still differs)
+    # 6b. noise images — tight tolerance because the antialias filter now matches
     hf_out_bl_n = proc(images=images, return_tensors="pt",
                        resample=PILImageResampling.BILINEAR)
     hf_pv_bl_n = hf_out_bl_n["pixel_values"].numpy()
 
     max_diff_bl_n = float(np.max(np.abs(pv - hf_pv_bl_n)))
-    ok = check("noise: pixel_values atol=0.3", max_diff_bl_n <= 0.3,
+    ok = check("noise: pixel_values atol=0.05", max_diff_bl_n <= 0.05,
                f"max_diff={max_diff_bl_n:.4f}")
     all_passed = all_passed and ok
 
     # ------------------------------------------------------------------
     # 7. <ver> vs HF fast forced to BILINEAR + antialias=False
-    #    Fully algorithm-matched: same kernel, same tap count, no filter.
-    #    Any remaining gap is purely float32 accumulation order (different
-    #    SIMD reduction in torchvision vs our njit loops, different rounding
-    #    point in HF's fused rescale_and_normalize vs our two-pass version).
-    #    Expected tight on both smooth and noise inputs (atol=0.05).
+    #    Diagnostic only: with the filtered sampler, high-frequency noise should
+    #    differ from the no-antialias HF path by the antialias-filter gap.
+    #    Smooth images remain tight because the filter has little effect there.
     # ------------------------------------------------------------------
-    print(f"\n--- {ver} vs HF fast (BILINEAR, antialias=False, fully matched) ---")
+    print(f"\n--- {ver} vs HF fast (BILINEAR, antialias=False diagnostic) ---")
     with _hf_no_antialias():
         hf_out_na_s = proc(images=smooth_images, return_tensors="pt",
                            resample=PILImageResampling.BILINEAR)
@@ -279,7 +272,7 @@ def main():
     all_passed = all_passed and ok
 
     max_diff_na_n = float(np.max(np.abs(pv - hf_pv_na_n)))
-    ok = check("noise: pixel_values atol=0.05", max_diff_na_n <= 0.05,
+    ok = check("noise: pixel_values atol=0.3", max_diff_na_n <= 0.3,
                f"max_diff={max_diff_na_n:.4f}")
     all_passed = all_passed and ok
 

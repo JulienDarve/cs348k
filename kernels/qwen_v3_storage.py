@@ -24,7 +24,7 @@ import numpy as np
 import numba
 from numba import njit, prange
 
-from kernels.bilinear import bilinear_sample
+from kernels.bilinear import bilinear_filter_sample
 from kernels.patch_coords import patch_linear_index, patch_output_offset
 from kernels.qwen_v1_naive import (
     smart_resize_dims,
@@ -61,6 +61,8 @@ def _v3_kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, output,
         c = img.shape[2]
         sy = h / out_h
         sx = w / out_w
+        sup_y = max(1.0, sy)
+        sup_x = max(1.0, sx)
 
         # ALGORITHM: patch grid width for this image
         n_patches_w = out_w // patch_size
@@ -73,8 +75,8 @@ def _v3_kernel(imgs, out_h_arr, out_w_arr, patch_offsets, mean, std, output,
                 # ALGORITHM: pixel-center aligned sampling (align_corners=False)
                 src_y = (y + 0.5) * sy - 0.5
                 src_x = (x + 0.5) * sx - 0.5
-                # ALGORITHM: bilinear sample → float32 pixel vector (length C)
-                pixel = bilinear_sample(img, src_x, src_y)
+                # ALGORITHM: Pillow-compatible bilinear sample → float32 pixel vector
+                pixel = bilinear_filter_sample(img, src_x, src_y, sup_x, sup_y)
 
                 # ALGORITHM: patch grid position for this output pixel
                 i_ph = y // patch_size

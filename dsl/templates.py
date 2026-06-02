@@ -26,7 +26,7 @@ import numpy as np
 import numba
 from numba import njit, prange
 
-from kernels.bilinear import bilinear_sample, bilinear_resize
+from kernels.bilinear import bilinear_filter_sample, bilinear_resize
 
 
 def _patch_output_size(orig_h, orig_w, target_h, target_w):
@@ -135,11 +135,13 @@ def make_template_pointwise(coord):
         out = np.empty((out_h, out_w, c), dtype=np.float32)
         sy = h / out_h
         sx = w / out_w
+        sup_y = max(1.0, sy)
+        sup_x = max(1.0, sx)
         for y in range(out_h):
             for x in range(out_w):
                 src_y = (y + 0.5) * sy - 0.5
                 src_x = (x + 0.5) * sx - 0.5
-                pixel = bilinear_sample(img, src_x, src_y)
+                pixel = bilinear_filter_sample(img, src_x, src_y, sup_x, sup_y)
                 for ch in range(c):
                     r = pixel[ch] * scale
                     out[y, x, ch] = (r - mean[ch]) / std[ch]
@@ -218,13 +220,15 @@ def make_template_full(coord, parallel_batch: bool):
                 out_w = out_w_arr[b]
                 sy = h / out_h
                 sx = w / out_w
+                sup_y = max(1.0, sy)
+                sup_x = max(1.0, sx)
                 n_patches_w = out_w // patch_size
                 base = patch_offsets[b]
                 for y in range(out_h):
                     for x in range(out_w):
                         src_y = (y + 0.5) * sy - 0.5
                         src_x = (x + 0.5) * sx - 0.5
-                        pixel = bilinear_sample(img, src_x, src_y)
+                        pixel = bilinear_filter_sample(img, src_x, src_y, sup_x, sup_y)
                         p_idx_local, py_p, px_p = row_fn_per_pixel(
                             y, x, patch_size, n_patches_w, merge_size,
                         )
@@ -252,13 +256,15 @@ def make_template_full(coord, parallel_batch: bool):
                 out_w = out_w_arr[b]
                 sy = h / out_h
                 sx = w / out_w
+                sup_y = max(1.0, sy)
+                sup_x = max(1.0, sx)
                 n_patches_w = out_w // patch_size
                 base = patch_offsets[b]
                 for y in range(out_h):
                     for x in range(out_w):
                         src_y = (y + 0.5) * sy - 0.5
                         src_x = (x + 0.5) * sx - 0.5
-                        pixel = bilinear_sample(img, src_x, src_y)
+                        pixel = bilinear_filter_sample(img, src_x, src_y, sup_x, sup_y)
                         p_idx_local, py_p, px_p = row_fn_per_pixel(
                             y, x, patch_size, n_patches_w, merge_size,
                         )

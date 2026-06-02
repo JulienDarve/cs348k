@@ -43,6 +43,41 @@ def bilinear_sample(img, x_f, y_f):
 
 
 @njit(cache=True)
+def bilinear_filter_sample(img, x_f, y_f, sup_x, sup_y):
+    """Pillow-compatible BILINEAR sample at source coords (x_f, y_f).
+
+    Downsampling uses a scaled triangle filter with support equal to the resize
+    scale. Upsampling degenerates to the standard four-tap bilinear sample.
+    """
+    h, w, c = img.shape
+    x_min = max(0, int(math.floor(x_f - sup_x)))
+    x_max = min(w, int(math.ceil(x_f + sup_x)))
+    y_min = max(0, int(math.floor(y_f - sup_y)))
+    y_max = min(h, int(math.ceil(y_f + sup_y)))
+
+    acc = np.zeros(c, dtype=np.float64)
+    total_weight = 0.0
+    for si in range(y_min, y_max):
+        wy = max(0.0, 1.0 - abs(si - y_f) / sup_y)
+        for sj in range(x_min, x_max):
+            wx = max(0.0, 1.0 - abs(sj - x_f) / sup_x)
+            weight = wy * wx
+            if weight > 0.0:
+                for ch in range(c):
+                    acc[ch] += weight * img[si, sj, ch]
+                total_weight += weight
+
+    out = np.empty(c, dtype=np.float32)
+    if total_weight > 0.0:
+        for ch in range(c):
+            out[ch] = acc[ch] / total_weight
+    else:
+        for ch in range(c):
+            out[ch] = 0.0
+    return out
+
+
+@njit(cache=True)
 def bilinear_resize(img, out_h, out_w):
     """Resize (H, W, C) uint8 to (out_h, out_w, C) float32 using Pillow-compatible
     BILINEAR filter.
@@ -61,29 +96,11 @@ def bilinear_resize(img, out_h, out_w):
 
     for oi in range(out_h):
         cy = (oi + 0.5) * scale_y - 0.5
-        y_min = max(0, int(math.floor(cy - sup_y)))
-        y_max = min(h, int(math.ceil(cy + sup_y)))
 
         for oj in range(out_w):
             cx = (oj + 0.5) * scale_x - 0.5
-            x_min = max(0, int(math.floor(cx - sup_x)))
-            x_max = min(w, int(math.ceil(cx + sup_x)))
-
-            tv = np.zeros(c, dtype=np.float64)
-            tw = 0.0
-
-            for si in range(y_min, y_max):
-                wy = max(0.0, 1.0 - abs(si - cy) / sup_y)
-                for sj in range(x_min, x_max):
-                    wx = max(0.0, 1.0 - abs(sj - cx) / sup_x)
-                    w_ij = wy * wx
-                    if w_ij > 0.0:
-                        for ch in range(c):
-                            tv[ch] += w_ij * img[si, sj, ch]
-                        tw += w_ij
-
-            if tw > 0.0:
-                for ch in range(c):
-                    out[oi, oj, ch] = tv[ch] / tw
+            pixel = bilinear_filter_sample(img, cx, cy, sup_x, sup_y)
+            for ch in range(c):
+                out[oi, oj, ch] = pixel[ch]
 
     return out
