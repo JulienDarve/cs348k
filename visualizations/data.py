@@ -17,6 +17,55 @@ FINAL_METHOD_LABELS = {
 }
 
 
+def get_qwen_w4_profiling_data() -> dict[str, object]:
+    """Return the focused Qwen2.5-VL W4 profiling results from bench_profile.py.
+
+    Source: AWS c7i.4xlarge run of:
+      benchmarks/bench_profile.py --model qwen --num-threads 8 --workloads W4
+      --variants hf_bilinear dsl_v1 dsl_v2 dsl_v3
+      --stage-variants dsl_v1 dsl_v2 dsl_v3
+
+    The comparison uses exact full-call cProfile totals. HF categories are
+    non-overlapping call groups from the text profile. DSL processing remains
+    grouped because cProfile cannot see inside the compiled Numba calls.
+    """
+    comparison_variants = (
+        "HF Bilinear",
+        "DSL v1\nstaged",
+        "DSL v2\npointwise fused",
+        "DSL v3\nfully fused",
+    )
+    comparison_categories = {
+        # pil_to_tensor cumulative time; includes PIL byte extraction.
+        "Input conversion": (132.0, 157.9, 157.5, 158.1),
+        "HF resize": (486.6, 0.0, 0.0, 0.0),
+        "HF rescale / normalize": (127.2, 0.0, 0.0, 0.0),
+        # Patch layout groups reshape and temporal repeat self times.
+        "HF patch layout": (232.7, 0.0, 0.0, 0.0),
+        # Output assembly groups torch.cat and torch.stack self times.
+        "HF output assembly": (234.0, 0.0, 0.0, 0.0),
+        # Residual full-call time after input conversion. The schedules differ:
+        # v1 is staged, v2 fuses rescale+normalize into resize, and v3 fully
+        # fuses sampling through the direct patch-output write.
+        "DSL processing call": (0.0, 1150.9, 1009.2, 1001.8),
+        "Other": (166.4, 0.0, 0.0, 0.0),
+    }
+    return {
+        "comparison_variants": comparison_variants,
+        "comparison_categories": comparison_categories,
+        "comparison_profile_totals_ms": (1378.9, 1308.8, 1166.7, 1159.9),
+        "geometry": {
+            "images": 8,
+            "input_hw": (3508, 2480),
+            "resized_hw": (3500, 2492),
+            "input_mp_total": 69.60,
+            "resized_mp_total": 69.78,
+            "patches_total": 356_000,
+            "output_mb": 1674.62,
+        },
+    }
+
+
 def get_llava_w4_profiling_data() -> dict[str, object]:
     """Return the focused LLaVA-NeXT W4 profiling results from bench_profile.py.
 
@@ -237,7 +286,37 @@ def get_final_selected_grouped_data(
     }
 
 
-def get_qwen_w4_thread_scaling() -> dict[str, object]:
+def get_final_hf_implementation_comparison(thread: str = "multi") -> dict[str, object]:
+    """Return combined Qwen and LLaVA data for the Hugging Face variants."""
+    tables = load_final_results()
+    families = (("qwen", "Qwen"), ("llava", "LLaVA-NeXT"))
+    methods = ("hf_legacy", "hf_fast", "hf_bilinear")
+    groups = tuple(
+        {"family": family_label, "workload": workload}
+        for _, family_label in families
+        for workload in WORKLOADS
+    )
+    metrics = {}
+
+    for metric in ("runtime", "memory"):
+        metrics[metric] = {
+            FINAL_METHOD_LABELS[method]: [
+                tables[(family, thread, metric)][workload][method]
+                for family, _ in families
+                for workload in WORKLOADS
+            ]
+            for method in methods
+        }
+
+    return {
+        "thread": thread,
+        "groups": groups,
+        "runtime": metrics["runtime"],
+        "memory": metrics["memory"],
+    }
+
+
+def get_qwen_final_thread_scaling(workload: str) -> dict[str, object]:
     tables = load_final_results()
     thread_keys = ("single", "four", "multi")
     thread_labels = ("1T", "4T", "8T")
@@ -248,35 +327,43 @@ def get_qwen_w4_thread_scaling() -> dict[str, object]:
     for method in methods:
         label = FINAL_METHOD_LABELS[method]
         values = [
-            tables[("qwen", thread, "runtime")]["W4"][method]
+            tables[("qwen", thread, "runtime")][workload][method]
             for thread in thread_keys
         ]
         series[label] = values
         speedups[label] = values[0] / values[-1]
 
     return {
-        "workload": "W4",
+        "workload": workload,
         "threads": thread_labels,
         "series": series,
         "speedups": speedups,
     }
 
 
-def get_qwen_w4_schedule_axes() -> dict[str, object]:
+def get_qwen_w3_thread_scaling() -> dict[str, object]:
+    return get_qwen_final_thread_scaling("W3")
+
+
+def get_qwen_w4_thread_scaling() -> dict[str, object]:
+    return get_qwen_final_thread_scaling("W4")
+
+
+def get_qwen_final_schedule_axes(workload: str) -> dict[str, object]:
     tables = load_final_results()
     variants = ("dsl_v1", "dsl_v2", "dsl_v3")
     variant_labels = ("v1", "v2", "v3")
-    runtime_rows = tables[("qwen", "multi", "runtime")]["W4"]
-    memory_rows = tables[("qwen", "multi", "memory")]["W4"]
+    runtime_rows = tables[("qwen", "multi", "runtime")][workload]
+    memory_rows = tables[("qwen", "multi", "memory")][workload]
     fusion_runtime = [runtime_rows[variant] for variant in variants]
     fusion_memory = [memory_rows[variant] for variant in variants]
     parallel_runtime = [
-        tables[("qwen", "single", "runtime")]["W4"]["dsl_v3"],
-        tables[("qwen", "multi", "runtime")]["W4"]["dsl_v3"],
+        tables[("qwen", "single", "runtime")][workload]["dsl_v3"],
+        tables[("qwen", "multi", "runtime")][workload]["dsl_v3"],
     ]
 
     return {
-        "workload": "W4",
+        "workload": workload,
         "variant_labels": variant_labels,
         "fusion_runtime": fusion_runtime,
         "fusion_memory": fusion_memory,
@@ -285,6 +372,14 @@ def get_qwen_w4_schedule_axes() -> dict[str, object]:
         "parallel_runtime": parallel_runtime,
         "parallel_speedup": parallel_runtime[0] / parallel_runtime[-1],
     }
+
+
+def get_qwen_w3_schedule_axes() -> dict[str, object]:
+    return get_qwen_final_schedule_axes("W3")
+
+
+def get_qwen_w4_schedule_axes() -> dict[str, object]:
+    return get_qwen_final_schedule_axes("W4")
 
 
 def get_llava_singlethread_memory_floor_summary() -> dict[str, float]:

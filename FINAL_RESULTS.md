@@ -31,6 +31,26 @@ Peak / Output RSS memory usage with `--num-threads 8` on AWS `c7i.4xlarge`. Best
 | W3 | 1.99x | 2.28x | 2.32x | 1.07x | **1.00x** | **1.00x** |
 | W4 | 2.02x | 3.86x | 3.84x | 1.88x | 1.83x | **1.13x** |
 
+### Chart 9: Qwen Four-Threaded Runtime
+
+Median runtime in ms/img with `--num-threads 4` on AWS `c7i.4xlarge`. Best model per workload is bolded.
+
+| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
+|---|---:|---:|---:|---:|---:|---:|
+| W2 | 63.949 | 27.901 | 27.600 | 28.766 | **26.693** | 31.301 |
+| W3 | 23.438 | 7.797 | **7.671** | 12.324 | 11.618 | 13.633 |
+| W4 | 725.749 | 244.217 | **241.679** | 289.493 | 256.362 | 265.060 |
+
+### Chart 10: Qwen Four-Threaded Peak Memory Allocation
+
+Peak / Output RSS memory usage with `--num-threads 4` on AWS `c7i.4xlarge`. Best model per workload is bolded.
+
+| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
+|---|---:|---:|---:|---:|---:|---:|
+| W2 | 2.08x | 3.88x | 3.76x | 1.14x | **1.00x** | **1.00x** |
+| W3 | 1.91x | 2.29x | 2.30x | **1.00x** | **1.00x** | **1.00x** |
+| W4 | 2.00x | 3.84x | 3.84x | 1.50x | 1.46x | **1.08x** |
+
 ### Chart 3: Single-Threaded Runtime
 
 Median runtime in ms/img with `--num-threads 1` on AWS `c7i.4xlarge`. Best model per workload is bolded.
@@ -73,6 +93,26 @@ Peak / Output RSS memory usage with `--num-threads 8` on AWS `c7i.4xlarge`. Best
 | W3 | 1.84x | 1.97x | 2.49x | **1.00x** | **1.00x** | **1.00x** |
 | W4 | 3.89x | 4.26x | 3.92x | **2.44x** | **2.44x** | **2.44x** |
 
+### Chart 11: LLaVA Four-Threaded Runtime
+
+Median runtime in ms/img with `--num-threads 4` on AWS `c7i.4xlarge`. Best model per workload is bolded.
+
+| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
+|---|---:|---:|---:|---:|---:|---:|
+| W2 | 39.626 | 7.826 | **7.362** | 11.908 | 11.805 | 11.896 |
+| W3 | 23.132 | 5.408 | **5.214** | 6.640 | 6.531 | 6.555 |
+| W4 | 157.478 | 33.903 | **29.540** | 70.745 | 70.626 | 70.488 |
+
+### Chart 12: LLaVA Four-Threaded Peak Memory Allocation
+
+Peak / Output RSS memory usage with `--num-threads 4` on AWS `c7i.4xlarge`. Best model per workload is bolded.
+
+| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
+|---|---:|---:|---:|---:|---:|---:|
+| W2 | 3.44x | 4.04x | 2.66x | **1.00x** | **1.00x** | **1.00x** |
+| W3 | 2.59x | 2.74x | 2.37x | **1.00x** | **1.00x** | **1.00x** |
+| W4 | 2.10x | 2.49x | 1.85x | **1.00x** | **1.00x** | **1.00x** |
+
 ### Chart 7: LLaVA Single-Threaded Runtime
 
 Median runtime in ms/img with `--num-threads 1` on AWS `c7i.4xlarge`. Best model per workload is bolded.
@@ -92,45 +132,3 @@ Peak / Output RSS memory usage with `--num-threads 1` on AWS `c7i.4xlarge`. Best
 | W2 | 3.44x | 4.05x | 3.98x | **1.00x** | **1.00x** | **1.00x** |
 | W3 | 1.66x | 1.77x | 1.75x | **1.00x** | **1.00x** | **1.00x** |
 | W4 | 3.39x | 3.07x | 1.83x | **1.00x** | **1.00x** | **1.00x** |
-
-## Four-Thread Results
-
-### Chart 9: Qwen Four-Threaded Runtime
-
-Median runtime in ms/img with `--num-threads 4` on AWS `c7i.4xlarge`. Best model per workload is bolded.
-
-| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
-|---|---:|---:|---:|---:|---:|---:|
-| W2 | 63.949 | 27.901 | 27.600 | 28.766 | **26.693** | 31.301 |
-| W3 | 23.438 | 7.797 | **7.671** | 12.324 | 11.618 | 13.633 |
-| W4 | 725.749 | 244.217 | **241.679** | 289.493 | 256.362 | 265.060 |
-
-### Chart 10: Qwen Four-Threaded Peak Memory Allocation
-
-Peak / Output RSS memory usage with `--num-threads 4` on AWS `c7i.4xlarge`. Best model per workload is bolded.
-
-| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
-|---|---:|---:|---:|---:|---:|---:|
-| W2 | 2.08x | 3.88x | 3.76x | 1.14x | **1.00x** | **1.00x** |
-| W3 | 1.91x | 2.29x | 2.30x | **1.00x** | **1.00x** | **1.00x** |
-| W4 | 2.00x | 3.84x | 3.84x | 1.50x | 1.46x | **1.08x** |
-
-### Chart 11: LLaVA Four-Threaded Runtime
-
-Median runtime in ms/img with `--num-threads 4` on AWS `c7i.4xlarge`. Best model per workload is bolded.
-
-| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
-|---|---:|---:|---:|---:|---:|---:|
-| W2 | 39.626 | 7.826 | **7.362** | 11.908 | 11.805 | 11.896 |
-| W3 | 23.132 | 5.408 | **5.214** | 6.640 | 6.531 | 6.555 |
-| W4 | 157.478 | 33.903 | **29.540** | 70.745 | 70.626 | 70.488 |
-
-### Chart 12: LLaVA Four-Threaded Peak Memory Allocation
-
-Peak / Output RSS memory usage with `--num-threads 4` on AWS `c7i.4xlarge`. Best model per workload is bolded.
-
-| Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
-|---|---:|---:|---:|---:|---:|---:|
-| W2 | 3.44x | 4.04x | 2.66x | **0.14x** | 1.00x | 1.00x |
-| W3 | 2.59x | 2.74x | 2.37x | **0.86x** | 1.00x | 1.00x |
-| W4 | 4.24x | **3.78x** | 7.19x | 4.85x | 4.85x | 4.85x |

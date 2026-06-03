@@ -6,15 +6,21 @@ import numpy as np
 
 try:
     from visualizations.data import (
+        get_final_hf_implementation_comparison,
         get_final_selected_grouped_data,
         get_llava_singlethread_memory_floor_summary,
+        get_qwen_w3_schedule_axes,
+        get_qwen_w3_thread_scaling,
         get_qwen_w4_schedule_axes,
         get_qwen_w4_thread_scaling,
     )
 except ModuleNotFoundError:
     from data import (
+        get_final_hf_implementation_comparison,
         get_final_selected_grouped_data,
         get_llava_singlethread_memory_floor_summary,
+        get_qwen_w3_schedule_axes,
+        get_qwen_w3_thread_scaling,
         get_qwen_w4_schedule_axes,
         get_qwen_w4_thread_scaling,
     )
@@ -119,6 +125,104 @@ def _plot_memory_floor_panel(
     _style_axes(ax)
 
 
+def _plot_hf_qwen_llava_metric(metric):
+    data = get_final_hf_implementation_comparison("multi")
+    groups = list(data["groups"])
+    workloads = [str(group["workload"]) for group in groups]
+    x = np.arange(len(groups))
+    width = 0.23
+    settings = {
+        "runtime": {
+            "title": "Hugging Face Runtime Across Qwen and LLaVA-NeXT (8 Threads)",
+            "ylabel": "Median runtime (ms/img, log scale)",
+            "value_fmt": "{:.1f}",
+            "filename": "slide_hf_qwen_llava_runtime.png",
+        },
+        "memory": {
+            "title": "Hugging Face Peak Memory Across Qwen and LLaVA-NeXT (8 Threads)",
+            "ylabel": "Peak / Output RSS (x)",
+            "value_fmt": "{:.2f}x",
+            "filename": "slide_hf_qwen_llava_memory.png",
+        },
+    }
+    setting = settings[metric]
+
+    fig, ax = plt.subplots(figsize=(10.8, 5.9))
+    for idx, (label, values) in enumerate(data[metric].items()):
+        offset = (idx - (len(data[metric]) - 1) / 2) * width
+        bars = ax.bar(
+            x + offset,
+            values,
+            width,
+            label=label,
+            color=COLORS[label],
+            edgecolor="white",
+            linewidth=0.9,
+        )
+        annotation_dy = 10 if label == "HF Fast" else 2
+        _annotate_bars(ax, bars, setting["value_fmt"], fontsize=8.5, dy=annotation_dy)
+
+    ax.axvline(2.5, color="#9CA3AF", linewidth=1.0, linestyle=(0, (3, 3)))
+    ax.set_title(setting["title"], fontsize=15, pad=14)
+    ax.set_ylabel(setting["ylabel"])
+    ax.set_xticks(x)
+    ax.set_xticklabels(workloads)
+    ax.text(
+        1,
+        -0.13,
+        "Qwen",
+        transform=ax.get_xaxis_transform(),
+        ha="center",
+        va="top",
+        fontsize=11,
+        fontweight="bold",
+    )
+    ax.text(
+        4,
+        -0.13,
+        "LLaVA-NeXT",
+        transform=ax.get_xaxis_transform(),
+        ha="center",
+        va="top",
+        fontsize=11,
+        fontweight="bold",
+    )
+    _style_axes(ax)
+
+    if metric == "runtime":
+        ax.set_yscale("log")
+        ax.set_ylim(3.2, 1200)
+        ax.set_yticks([5, 10, 20, 50, 100, 200, 500, 1000])
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:.0f}"))
+        ax.yaxis.set_minor_formatter(NullFormatter())
+    else:
+        ax.axhline(1.0, color="#111827", linestyle=(0, (4, 3)), linewidth=1.1, alpha=0.75)
+        ax.text(
+            1.01,
+            1.02,
+            "output floor",
+            transform=ax.get_yaxis_transform(),
+            ha="left",
+            va="bottom",
+            fontsize=9,
+            clip_on=False,
+        )
+        ax.set_ylim(0, 4.85)
+
+    legend_location = "upper right" if metric == "runtime" else "upper center"
+    ax.legend(frameon=True, ncol=3, loc=legend_location)
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    return _save(fig, setting["filename"])
+
+
+def plot_hf_qwen_llava_runtime():
+    return _plot_hf_qwen_llava_metric("runtime")
+
+
+def plot_hf_qwen_llava_memory():
+    return _plot_hf_qwen_llava_metric("memory")
+
+
 def plot_slide_5_qwen_memory_floor():
     fig, ax = plt.subplots(figsize=(9.4, 5.7))
     _plot_memory_floor_panel(
@@ -171,16 +275,25 @@ def plot_slide_5_combined_memory_floor():
     return _save(fig, "slide_5_qwen_llava_memory_floor.png")
 
 
-def plot_slide_6_qwen_w4_thread_scaling():
-    data = get_qwen_w4_thread_scaling()
+def _plot_qwen_thread_scaling(data, settings):
     threads = list(data["threads"])
     x = np.arange(len(threads))
     series = data["series"]
     speedups = data["speedups"]
 
     fig, ax = plt.subplots(figsize=(9.6, 5.6))
-    ax.axvspan(1.05, 1.95, color="#FDE68A", alpha=0.28, zorder=0)
-    ax.text(1.5, 188, "crossover", ha="center", va="center", fontsize=10, color="#78350F")
+    if settings.get("highlight"):
+        highlight = settings["highlight"]
+        ax.axvspan(*highlight["span"], color="#FDE68A", alpha=0.28, zorder=0)
+        ax.text(
+            highlight["x"],
+            highlight["y"],
+            highlight["text"],
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#78350F",
+        )
 
     for label, values in series.items():
         ax.plot(
@@ -211,37 +324,70 @@ def plot_slide_6_qwen_w4_thread_scaling():
             color=COLORS[label],
         )
 
-    ax.text(
-        0.25,
-        155,
-        f"HF scales {speedups['HF Bilinear']:.1f}x",
-        color=COLORS["HF Bilinear"],
-        fontsize=10,
-    )
-    ax.text(
-        1.28,
-        128,
-        f"DSL scales {speedups['DSL v3']:.1f}x",
-        color=COLORS["DSL v3"],
-        fontsize=10,
-    )
-    ax.set_title("Qwen W4 Runtime Scaling: DSL Crosses HF at 8 Threads", fontsize=15, pad=14)
+    for label, prefix in (("HF Bilinear", "HF"), ("DSL v3", "DSL")):
+        text_x, text_y = settings["speedup_positions"][label]
+        ax.text(
+            text_x,
+            text_y,
+            f"{prefix} scales {speedups[label]:.1f}x",
+            color=COLORS[label],
+            fontsize=10,
+        )
+
+    ax.set_title(settings["title"], fontsize=15, pad=14)
     ax.set_ylabel("Median runtime (ms/img, log scale)")
     ax.set_xticks(x)
     ax.set_xticklabels(threads)
     ax.set_yscale("log")
-    ax.set_ylim(115, 1150)
-    ax.set_yticks([140, 200, 300, 500, 800, 1000])
+    ax.set_ylim(*settings["ylim"])
+    ax.set_yticks(settings["yticks"])
     ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:.0f}"))
     ax.yaxis.set_minor_formatter(NullFormatter())
     ax.legend(frameon=True, loc="upper right")
     _style_axes(ax)
     fig.tight_layout()
-    return _save(fig, "slide_6_qwen_w4_thread_scaling.png")
+    return _save(fig, settings["filename"])
 
 
-def plot_slide_7_qwen_schedule_axes():
-    data = get_qwen_w4_schedule_axes()
+def plot_slide_6_qwen_w3_thread_scaling():
+    return _plot_qwen_thread_scaling(
+        get_qwen_w3_thread_scaling(),
+        {
+            "title": "Qwen W3 Runtime Scaling: DSL Scales Better, HF Remains Faster",
+            "filename": "slide_6_qwen_w3_thread_scaling.png",
+            "ylim": (4.5, 60),
+            "yticks": [5, 8, 10, 20, 30, 50],
+            "speedup_positions": {
+                "HF Bilinear": (0.18, 5.8),
+                "DSL v3": (1.12, 33),
+            },
+        },
+    )
+
+
+def plot_slide_6_qwen_w4_thread_scaling():
+    return _plot_qwen_thread_scaling(
+        get_qwen_w4_thread_scaling(),
+        {
+            "title": "Qwen W4 Runtime Scaling: DSL Crosses HF at 8 Threads",
+            "filename": "slide_6_qwen_w4_thread_scaling.png",
+            "ylim": (115, 1150),
+            "yticks": [140, 200, 300, 500, 800, 1000],
+            "speedup_positions": {
+                "HF Bilinear": (0.25, 155),
+                "DSL v3": (1.28, 128),
+            },
+            "highlight": {
+                "span": (1.05, 1.95),
+                "x": 1.5,
+                "y": 188,
+                "text": "crossover",
+            },
+        },
+    )
+
+
+def _plot_qwen_schedule_axes(data, settings):
     variants = list(data["variant_labels"])
     x = np.arange(len(variants))
 
@@ -258,7 +404,7 @@ def plot_slide_7_qwen_schedule_axes():
     )
     for xi, value in zip(x, data["fusion_runtime"]):
         ax_fusion.annotate(
-            f"{value:.0f}",
+            settings["runtime_fmt"].format(value),
             xy=(xi, value),
             xytext=(0, 9),
             textcoords="offset points",
@@ -266,12 +412,12 @@ def plot_slide_7_qwen_schedule_axes():
             fontsize=9,
             color="#4363D8",
         )
-    ax_fusion.set_title("Qwen W4 Fusion Axis: Runtime Moves Little, Memory Drops at v3", fontsize=15, pad=14)
+    ax_fusion.set_title(settings["title"], fontsize=15, pad=14)
     ax_fusion.set_ylabel("Runtime (ms/img)")
     ax_fusion.set_xticks(x)
     ax_fusion.set_xticklabels(variants)
     ax_fusion.set_xlabel("Schedule variant")
-    ax_fusion.set_ylim(125, max(data["fusion_runtime"]) * 1.14)
+    ax_fusion.set_ylim(settings["runtime_ymin"], max(data["fusion_runtime"]) * 1.14)
     _style_axes(ax_fusion)
 
     ax_memory = ax_fusion.twinx()
@@ -307,10 +453,15 @@ def plot_slide_7_qwen_schedule_axes():
         fontsize=10,
         bbox={"boxstyle": "round,pad=0.28", "facecolor": "white", "edgecolor": "#D1D5DB"},
     )
+    memory_note = settings["memory_note"]
+    target_index = memory_note["target_index"]
     ax_memory.annotate(
-        "memory drops at v3",
-        xy=(2, data["fusion_memory"][-1]),
-        xytext=(1.2, data["fusion_memory"][0] * 0.86),
+        memory_note["text"],
+        xy=(target_index, data["fusion_memory"][target_index]),
+        xytext=(
+            memory_note["text_x"],
+            max(data["fusion_memory"]) * memory_note["text_y_scale"],
+        ),
         arrowprops={"arrowstyle": "->", "color": COLORS["Memory"], "lw": 1.4},
         fontsize=10,
         color=COLORS["Memory"],
@@ -324,7 +475,43 @@ def plot_slide_7_qwen_schedule_axes():
         loc="lower left",
     )
     fig.tight_layout()
-    return _save(fig, "slide_7_qwen_schedule_axes.png")
+    return _save(fig, settings["filename"])
+
+
+def plot_slide_7_qwen_w3_schedule_axes():
+    return _plot_qwen_schedule_axes(
+        get_qwen_w3_schedule_axes(),
+        {
+            "title": "Qwen W3 Fusion Axis: Memory Reaches the Floor at v2",
+            "filename": "slide_7_qwen_w3_schedule_axes.png",
+            "runtime_fmt": "{:.1f}",
+            "runtime_ymin": 6.7,
+            "memory_note": {
+                "text": "memory reaches floor at v2",
+                "target_index": 1,
+                "text_x": 0.62,
+                "text_y_scale": 1.056,
+            },
+        },
+    )
+
+
+def plot_slide_7_qwen_schedule_axes():
+    return _plot_qwen_schedule_axes(
+        get_qwen_w4_schedule_axes(),
+        {
+            "title": "Qwen W4 Fusion Axis: Runtime Moves Little, Memory Drops at v3",
+            "filename": "slide_7_qwen_schedule_axes.png",
+            "runtime_fmt": "{:.0f}",
+            "runtime_ymin": 125,
+            "memory_note": {
+                "text": "memory drops at v3",
+                "target_index": 2,
+                "text_x": 1.2,
+                "text_y_scale": 0.86,
+            },
+        },
+    )
 
 
 def plot_slide_8_llava_schedule_flat_runtime():
@@ -409,10 +596,14 @@ def plot_slide_8_llava_schedule_flat_runtime():
 
 def main():
     paths = [
+        plot_hf_qwen_llava_runtime(),
+        plot_hf_qwen_llava_memory(),
         plot_slide_5_qwen_memory_floor(),
         plot_slide_5_llava_singlethread_memory_floor(),
         plot_slide_5_combined_memory_floor(),
+        plot_slide_6_qwen_w3_thread_scaling(),
         plot_slide_6_qwen_w4_thread_scaling(),
+        plot_slide_7_qwen_w3_schedule_axes(),
         plot_slide_7_qwen_schedule_axes(),
         plot_slide_8_llava_schedule_flat_runtime(),
     ]
