@@ -1,8 +1,6 @@
-# cs348k
+# Algorithm-Schedule Separation for VLM Image Preprocessing
 
-Please go to `MILESTONE_2.md` for the write up and results for Milestone 2!
-
-
+Please go to `CS_348k_Final_Report.pdf` for the final report!
 
 ## Project Proposal
 
