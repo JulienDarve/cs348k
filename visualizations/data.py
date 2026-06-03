@@ -17,6 +17,76 @@ FINAL_METHOD_LABELS = {
 }
 
 
+def get_llava_w4_profiling_data() -> dict[str, object]:
+    """Return the focused LLaVA-NeXT W4 profiling results from bench_profile.py.
+
+    Source: AWS c7i.4xlarge run of:
+      benchmarks/bench_profile.py --model llava --num-threads 8 --workloads W4
+      --variants hf_fast hf_bilinear dsl_v1 dsl_v2 dsl_v3
+      --stage-variants dsl_v1 dsl_v2 dsl_v3
+
+    Stage values are medians in ms/batch. The setup category groups tile
+    selection, descriptor construction, output allocation, and typed-list
+    construction because each is individually below 0.3 ms.
+    """
+    variants = ("DSL v1", "DSL v2", "DSL v3")
+    stages = {
+        "PIL to NumPy": (80.209, 80.777, 79.951),
+        "Setup": (0.414, 0.422, 0.409),
+        "Thumbnail kernel": (140.288, 140.370, 140.046),
+        "Grid kernel": (153.307, 151.579, 125.611),
+    }
+    comparison_variants = ("HF Bilinear", "DSL v1", "DSL v2", "DSL v3")
+    comparison_categories = {
+        # HF input conversion uses the pil_to_tensor cumulative subtree, which
+        # already includes PIL byte extraction. Do not add pil_decode again.
+        "Input conversion": (125.3, 80.209, 80.777, 79.951),
+        "HF resize": (73.1, 0.0, 0.0, 0.0),
+        # The stage profiler invokes one Numba template call for thumbnail
+        # descriptors and one for grid descriptors, so this is a grouped call
+        # boundary rather than a claim that every schedule is fused. v1 runs
+        # staged resize/rescale/normalize/CHW loops, v2 keeps resize separate
+        # from a fused pointwise+CHW pass, and v3 fully fuses sampling to output.
+        "DSL tile-processing call": (0.0, 293.595, 291.949, 265.657),
+        "Rescale / normalize": (3.8, 0.0, 0.0, 0.0),
+        # HF groups tile selection, padding/cropping, and stack. DSL groups
+        # tile selection, descriptor construction, allocation, and typed list.
+        "Tiling / assembly / setup": (11.9, 0.414, 0.422, 0.409),
+        "Other": (3.7, 0.0, 0.0, 0.0),
+    }
+    return {
+        "variants": variants,
+        "stages": stages,
+        "stage_sums_ms": (374.22, 373.15, 346.02),
+        "end_to_end_ms": (348.46, 346.99, 346.40),
+        "hf_profile_totals_ms": {
+            "HF Fast": 217.9,
+            "HF Bilinear": 217.8,
+        },
+        "comparison_variants": comparison_variants,
+        "comparison_categories": comparison_categories,
+        "comparison_profile_totals_ms": (217.8, 374.22, 373.15, 346.02),
+        "comparison_end_to_end_ms": (217.8, 348.46, 346.99, 346.40),
+        "geometry": {
+            "images": 8,
+            "input_hw": (3508, 2480),
+            "best_resolution_hw": (672, 672),
+            "resized_grid_content_hw": (672, 476),
+            "tiles_total": 40,
+            "thumbnail_tiles": 8,
+            "grid_tiles": 32,
+            "output_mb": 54.19,
+            "output_pixels": 4_515_840,
+            "sampled_output_pixels": 3_462_144,
+            "padded_output_pixels": 1_053_696,
+            "source_taps": 643_450_120,
+            "thumbnail_taps": 309_848_928,
+            "grid_taps": 333_601_192,
+            "avg_taps_per_sample": 185.9,
+        },
+    }
+
+
 @dataclass(frozen=True)
 class BenchmarkRow:
     workload: str

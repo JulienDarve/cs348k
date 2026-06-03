@@ -125,7 +125,7 @@ def plot_slide_5_qwen_memory_floor():
         ax,
         "qwen",
         "single",
-        "Qwen Storage Fusion Drives Peak Memory to the Output Floor",
+        "Qwen 1 Thread: Peak Memory Reaches the Output Floor",
         "DSL v3 (Qwen)",
         4,
     )
@@ -139,7 +139,7 @@ def plot_slide_5_llava_singlethread_memory_floor():
         ax,
         "llava",
         "single",
-        "LLaVA-NeXT Memory Reaches the Output Floor",
+        "LLaVA-NeXT 1 Thread: Peak Memory Reaches the Output Floor",
         "DSL v3 (LLaVA)",
         4,
     )
@@ -166,7 +166,7 @@ def plot_slide_5_combined_memory_floor():
         2,
         show_ylabel=False,
     )
-    fig.suptitle("Peak Memory Reaches the Output Floor", fontsize=16, y=1.02)
+    fig.suptitle("1 Thread Peak Memory Reaches the Output Floor", fontsize=16, y=1.02)
     fig.tight_layout()
     return _save(fig, "slide_5_qwen_llava_memory_floor.png")
 

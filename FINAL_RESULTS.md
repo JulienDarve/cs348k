@@ -48,7 +48,7 @@ Peak / Output RSS memory usage with `--num-threads 1` on AWS `c7i.4xlarge`. Best
 | Workload | hf_legacy | hf_fast | hf_bilinear | dsl_v1 | dsl_v2 | dsl_v3 |
 |---|---:|---:|---:|---:|---:|---:|
 | W2 | 2.08x | 3.88x | 3.76x | **1.00x** | **1.00x** | **1.00x** |
-| W3 | 1.91x | 2.30x | 2.31x | 1.00x | **0.77x** | 1.00x |
+| W3 | 1.91x | 2.30x | 2.31x | **1.00x** | **1.00x** | **1.00x** |
 | W4 | 2.02x | 3.84x | 3.84x | 1.20x | 1.20x | **1.08x** |
 
 ## LLaVA Results

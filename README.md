@@ -103,6 +103,8 @@ Contains Python scripts for creating visualizations from the output data.
 
 - `final_results_charts.py`: Creates final Qwen and LLaVA runtime, peak-memory, and runtime/memory Pareto charts from `FINAL_RESULTS.md`.
 
+- `llava_w4_profiling_charts.py`: Creates focused LLaVA-NeXT W4 profiling charts showing DSL stage timing and the large-image sampling work that drives the slowdown.
+
 - `final_results_gallery.md`: Links the final generated Qwen and LLaVA result figures.
 
 - `final_slide_figures.py`: Creates the data-backed final presentation figures requested for slides 5 through 8 from `FINAL_RESULTS.md`.
@@ -128,6 +130,10 @@ Contains Python scripts for creating visualizations from the output data.
 - `final_llava_singlethread_memory.png`: Shows single-thread LLaVA-NeXT peak/output RSS memory for HF and DSL implementations.
 
 - `final_runtime_memory_pareto.png`: Shows runtime versus peak/output RSS memory Pareto frontiers for Qwen and LLaVA-NeXT across thread settings and workloads.
+
+- `final_llava_w4_profile_breakdown.png`: Compares the LLaVA-NeXT W4 HF Bilinear and DSL v1/v2/v3 profiling breakdowns, distinguishing HF resize from grouped DSL tile-processing calls and explaining the schedules' different fusion levels.
+
+- `final_llava_w4_sampling_work.png`: Shows LLaVA-NeXT W4 output pixel composition and estimated thumbnail/grid source-sampling work.
 
 - `slide_5_qwen_memory_floor.png`: Shows Qwen single-thread peak/output RSS memory for HF baselines and DSL v3 with the output-floor reference line.
 
